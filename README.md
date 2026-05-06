@@ -1,2 +1,66 @@
-# oblivia-protocol
-Zero-identity contract signing protocol for Solana
+# Oblivia Protocol
+
+> *Forget who I am. Remember what I signed.*
+
+Zero-identity contract signing protocol for Solana. Sign legally binding agreements with full cryptographic provability and zero identity disclosure.
+
+## What It Does
+
+Oblivia enables any party — human, DAO, or autonomous agent — to sign contracts using:
+- **Zero-knowledge proofs** — proves you signed without revealing who you are
+- **Biometric entropy** — your face or voice derives a signing key, entirely on-device
+- **On-chain notarization** — permanent, tamper-proof record on Solana
+
+No government ID. No KYC. No centralized server. No fees. Ever.
+
+## What Is Built
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| ZK Intent Circuit | ✅ Complete | Noir circuit, UltraHonk proof, verified |
+| Biometric Entropy Client | ✅ Complete | Fuzzy extractor, stable key derivation |
+| Browser Client | ✅ Complete | TensorFlow face detection, on-device processing |
+| Integration | ✅ Complete | Full end-to-end pipeline working |
+| Anchor Smart Contracts | 🔨 Building | On-chain contract storage, multi-sig |
+| Witness Network | 🔨 Building | Permissionless notarization nodes |
+| Reference dApps | 🔨 Building | Anonymous signing + DAO governance tools |
+| Security Audit | 📅 Planned | Independent third-party audit |
+| Mainnet Launch | 📅 Planned | Full public deployment |
+
+## Quick Start
+
+### ZK Circuit
+```bash
+cd zk_intent_circuit
+nargo test
+nargo compile
+nargo execute
+```
+
+### Biometric Entropy Client
+```bash
+cd biometric-entropy-client
+npm install
+node test.js
+```
+
+### Full Integration
+```bash
+npm install
+node integration.js
+```
+
+### Browser Client
+```bash
+cd browser-client
+npm install
+npm start
+```
+
+## Architecture
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for full technical documentation.
+
+## License
+
+MIT — free to use, fork, and build on forever.
