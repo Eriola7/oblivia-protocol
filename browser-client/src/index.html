@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oblivia - Zero Identity Contract Signing</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+        h1 { 
+            font-size: 2rem;
+            color: #ffffff;
+            margin-bottom: 8px;
+            letter-spacing: 4px;
+        }
+        .tagline {
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: #111;
+            border: 1px solid #222;
+            padding: 40px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        label {
+            display: block;
+            color: #888;
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        textarea {
+            width: 100%;
+            background: #0a0a0a;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            resize: none;
+            height: 80px;
+        }
+        .biometric-box {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .biometric-box:hover { border-color: #555; }
+        .biometric-box.active { border-color: #00ff88; }
+        .biometric-status {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 8px;
+        }
+        button {
+            width: 100%;
+            background: #ffffff;
+            color: #000000;
+            border: none;
+            padding: 14px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+        button:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            padding: 16px;
+            font-size: 0.75rem;
+            color: #666;
+            min-height: 120px;
+            margin-top: 20px;
+            line-height: 1.8;
+        }
+        .log .success { color: #00ff88; }
+        .log .step { color: #888; }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #00ff88;
+            display: none;
+        }
+        .result.show { display: block; }
+        .result-line {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+        }
+        .result-line .value { color: #00ff88; }
+    </style>
+</head>
+<body>
+    <h1>OBLIVIA</h1>
+    <p class="tagline">forget who i am. remember what i signed.</p>
+    
+    <div class="container">
+        <div class="section">
+            <label>Contract</label>
+            <textarea id="contract" placeholder="Paste your contract text here..."></textarea>
+        </div>
+
+        <div class="section">
+            <label>Biometric Verification</label>
+            <div class="biometric-box" id="biometricBox" onclick="captureBiometric()">
+                <div id="biometricIcon">◉</div>
+                <div class="biometric-status" id="biometricStatus">Click to capture biometric</div>
+            </div>
+        </div>
+
+        <button id="signBtn" onclick="signContract()" disabled>Sign Contract</button>
+
+        <div class="log" id="log"></div>
+
+        <div class="result" id="result">
+            <div class="result-line">
+                <span>Contract Signed</span>
+                <span class="value">TRUE</span>
+            </div>
+            <div class="result-line">
+                <span>Identity Revealed</span>
+                <span class="value">FALSE</span>
+            </div>
+            <div class="result-line">
+                <span>Data Transmitted</span>
+                <span class="value">FALSE</span>
+            </div>
+            <div class="result-line">
+                <span>Proof</span>
+                <span class="value" id="proofDisplay">...</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
