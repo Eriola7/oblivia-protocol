@@ -1,0 +1,20 @@
+{
+  "name": "biometric-entropy-client",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@noble/hashes": "^2.2.0",
+    "@tensorflow-models/face-landmarks-detection": "^1.0.6",
+    "@tensorflow/tfjs-node": "^4.22.0",
+    "crypto-js": "^4.2.0",
+    "noble-hashes": "^0.3.1"
+  }
+}
