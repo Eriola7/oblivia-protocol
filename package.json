@@ -1,0 +1,25 @@
+{
+  "name": "oblivia-protocol",
+  "version": "1.0.0",
+  "description": "Zero-identity contract signing protocol for Solana",
+  "main": "integration.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eriola7/oblivia-protocol.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Eriola7/oblivia-protocol/issues"
+  },
+  "homepage": "https://github.com/Eriola7/oblivia-protocol#readme",
+  "dependencies": {
+    "@aztec/bb.js": "^4.2.0",
+    "@noir-lang/noir_js": "^1.0.0-beta.20"
+  }
+}
