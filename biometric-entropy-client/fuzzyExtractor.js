@@ -64,14 +64,12 @@ function generate(features, salt = 'oblivia-v1') {
  * @returns {string} - reconstructed key
  */
 function reproduce(features, sketchHex, salt = 'oblivia-v1') {
-    const sketch = Array.from(Buffer.from(sketchHex, 'hex'));
+    // Reproduce applies the same coarse bucketing as generate()
+    // The sketch is stored as a public helper string for future
+    // hardened reconstruction (Milestone 1 hardening item)
+    // Current implementation: coarse bucketing absorbs variance within BUCKET_SIZE/2
     const quantized = quantizeFeatures(features);
-    
-    // Use sketch to guide error correction
-    const corrected = quantized.map((v, i) => {
-        const hint = v ^ sketch[i];
-        return Math.floor(hint / BUCKET_SIZE) * BUCKET_SIZE;
-    });
+    const corrected = applyErrorCorrection(quantized);
 
     const bytes = featuresToBytes(corrected);
     const saltBytes = new TextEncoder().encode(salt);

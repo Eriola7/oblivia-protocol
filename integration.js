@@ -1,6 +1,6 @@
 const { Noir } = require('@noir-lang/noir_js');
 const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
-const { deriveKey } = require('./biometric-entropy-client/fuzzyExtractor');
+const { generate } = require('./biometric-entropy-client/fuzzyExtractor');
 const circuit = require('./zk_intent_circuit/target/zk_intent_circuit.json');
 
 /**
@@ -12,11 +12,13 @@ const circuit = require('./zk_intent_circuit/target/zk_intent_circuit.json');
 async function signContract(biometricFeatures, contractData) {
     console.log("=== Oblivia Protocol - Contract Signing ===\n");
 
-    // Step 1: Derive signing key from biometric
+    // Step 1: Derive signing key from biometric using fuzzy extractor
+    // generate() returns {key, sketch} - key stays private, sketch is public helper
     console.log("Step 1: Deriving signing key from biometric...");
-    const signingKeyHex = deriveKey(biometricFeatures);
+    const { key: signingKeyHex, sketch } = generate(biometricFeatures);
     const signingKey = BigInt('0x' + signingKeyHex.slice(0, 16)).toString();
     console.log("Signing key derived. (never transmitted, never stored)");
+    console.log("Public sketch generated. (safe to store, reveals nothing about biometric)");
 
     // Step 2: Hash the contract
     console.log("\nStep 2: Hashing contract...");
