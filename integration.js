@@ -55,7 +55,6 @@ async function signContract(biometricFeatures, contractData) {
     return { verified, proof };
 }
 
-// Test with simulated biometric
 
 // Solana devnet integration
 const { storeProofOnChain } = require('./solana_integration');
