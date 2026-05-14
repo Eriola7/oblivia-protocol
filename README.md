@@ -64,3 +64,13 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for full technical documentation.
 ## License
 
 MIT — free to use, fork, and build on forever.
+
+## Live Devnet Transaction
+
+Oblivia ZK proof anchored on Solana devnet:
+
+**Transaction:** `8gFnhz4PHqZN4GCPRvr3EE6wkfQgPU5ERsRhdMdAZq78YyenTmMicSnQdNV2cMh2yBD5g8YesPTwuSVXWNJ27Vy`
+
+**Explorer:** https://explorer.solana.com/tx/8gFnhz4PHqZN4GCPRvr3EE6wkfQgPU5ERsRhdMdAZq78YyenTmMicSnQdNV2cMh2yBD5g8YesPTwuSVXWNJ27Vy?cluster=devnet
+
+Proof hash anchored on-chain via Solana Memo Program. Finalized. Permanently verifiable.
