@@ -17,10 +17,11 @@ No government ID. No KYC. No centralized server. No fees. Ever.
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| ZK Intent Circuit | ✅ Complete | Noir circuit, UltraHonk proof, verified |
-| Biometric Entropy Client | ✅ Complete | Fuzzy extractor, stable key derivation |
-| Browser Client | ✅ Complete | TensorFlow face detection, on-device processing |
-| Integration | ✅ Complete | Full end-to-end pipeline working |
+| ZK Intent Circuit | ✅ Complete | Noir circuit, Pedersen hash commitment, UltraHonk proof, 33 public inputs, verified |
+| Biometric Entropy Client | ✅ Complete | Fuzzy extractor with secure sketch, Dodis et al. construction, realistic variance testing |
+| Browser Client | ✅ Complete | TensorFlow face detection, on-device biometric key derivation |
+| Integration | ✅ Complete | Full end-to-end pipeline — biometric to fuzzy extractor to ZK proof to Solana devnet |
+| Solana Devnet | ✅ Complete | Proof hash anchored on-chain via Memo program, 5 live transactions |
 | Anchor Smart Contracts | 🔨 Building | On-chain contract storage, multi-sig |
 | Witness Network | 🔨 Building | Permissionless notarization nodes |
 | Reference dApps | 🔨 Building | Anonymous signing + DAO governance tools |
