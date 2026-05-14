@@ -74,3 +74,16 @@ Oblivia ZK proof anchored on Solana devnet:
 **Explorer:** https://explorer.solana.com/tx/8gFnhz4PHqZN4GCPRvr3EE6wkfQgPU5ERsRhdMdAZq78YyenTmMicSnQdNV2cMh2yBD5g8YesPTwuSVXWNJ27Vy?cluster=devnet
 
 Proof hash anchored on-chain via Solana Memo Program. Finalized. Permanently verifiable.
+
+## Environment Setup
+
+Copy `.env.example` to `.env` and set your Solana devnet keypair:
+
+```bash
+cp .env.example .env
+```
+
+Generate a funded devnet keypair:
+1. Run: `node -e "const {Keypair} = require('@solana/web3.js'); console.log(Buffer.from(Keypair.generate().secretKey).toString('hex'));"`
+2. Fund it at: https://faucet.solana.com
+3. Add the hex key to your `.env` file
