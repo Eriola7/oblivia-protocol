@@ -16,7 +16,7 @@ async function signContract(biometricFeatures, contractData) {
     // generate() returns {key, sketch} - key stays private, sketch is public helper
     console.log("Step 1: Deriving signing key from biometric...");
     const { key: signingKeyHex, sketch } = generate(biometricFeatures);
-    const signingKey = BigInt('0x' + signingKeyHex.slice(0, 16)).toString();
+    const signingKey = BigInt('0x' + signingKeyHex.slice(0, 32)).toString();
     console.log("Signing key derived. (never transmitted, never stored)");
     console.log("Public sketch generated. (safe to store, reveals nothing about biometric)");
 
