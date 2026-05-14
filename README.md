@@ -88,3 +88,14 @@ Generate a funded devnet keypair:
 1. Run: `node -e "const {Keypair} = require('@solana/web3.js'); console.log(Buffer.from(Keypair.generate().secretKey).toString('hex'));"`
 2. Fund it at: https://faucet.solana.com
 3. Add the hex key to your `.env` file
+
+## Implementation Notes
+
+**Browser Client Proof Generation**
+The browser client demonstrates the full signing UX including real biometric capture via TensorFlow MediaPipe and on-device key derivation. The ZK proof generation step in the browser uses a simulated flow — the actual Barretenberg proving pipeline runs in the Node.js integration layer (`integration.js`). Browser-native ZK proof generation is scoped for Milestone 3, where the full Anchor SDK and on-chain verifier will be built.
+
+To run the real end-to-end proving pipeline:
+```bash
+npm install
+node integration.js
+```
