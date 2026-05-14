@@ -18,9 +18,12 @@ const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 async function storeProofOnChain(proofHex) {
     console.log('\n=== Solana Devnet Integration ===\n');
     
-    // Generate ephemeral keypair for this proof submission
-    const secretHex = '528ae04b59803de5d6533ebb06307d4f62efe6b22e176c7d1ff64b3e94c438b8d900d20d46a1e012694e68a60d6eaa7aa3ae1dad84adcdda2dbf2e16613536b6';
-    const signer = Keypair.fromSecretKey(Buffer.from(secretHex, 'hex'));
+    // Load keypair from environment variable or generate ephemeral keypair
+    // For production: set OBLIVIA_DEVNET_KEY environment variable
+    const secretHex = process.env.OBLIVIA_DEVNET_KEY || null;
+    const signer = secretHex 
+        ? Keypair.fromSecretKey(Buffer.from(secretHex, 'hex'))
+        : Keypair.generate();
     
     console.log('Using funded devnet wallet...');
     
