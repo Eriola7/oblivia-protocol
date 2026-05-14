@@ -20,6 +20,7 @@
   "homepage": "https://github.com/Eriola7/oblivia-protocol#readme",
   "dependencies": {
     "@aztec/bb.js": "^4.2.0",
-    "@noir-lang/noir_js": "^1.0.0-beta.20"
+    "@noir-lang/noir_js": "^1.0.0-beta.20",
+    "@solana/web3.js": "^1.98.4"
   }
 }
