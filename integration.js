@@ -2,23 +2,22 @@ const { Noir } = require('@noir-lang/noir_js');
 const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
 const { generate } = require('./biometric-entropy-client/fuzzyExtractor');
 const circuit = require('./zk_intent_circuit/target/zk_intent_circuit.json');
+const { registerContract, submitSignature, verifySignature } = require('./anchor_integration');
 
 /**
- * Oblivia - Full Integration Test
- * Biometric features → signing key → ZK proof → verified
+ * Oblivia - Full Integration
+ * Biometric → ZK proof → Anchor program → on-chain verified
  * Zero identity revealed. Zero data transmitted.
  */
 
 async function signContract(biometricFeatures, contractData) {
     console.log("=== Oblivia Protocol - Contract Signing ===\n");
 
-    // Step 1: Derive signing key from biometric using fuzzy extractor
-    // generate() returns {key, sketch} - key stays private, sketch is public helper
+    // Step 1: Derive signing key from biometric
     console.log("Step 1: Deriving signing key from biometric...");
     const { key: signingKeyHex, sketch } = generate(biometricFeatures);
     const signingKey = BigInt('0x' + signingKeyHex.slice(0, 32)).toString();
     console.log("Signing key derived. (never transmitted, never stored)");
-    console.log("Public sketch generated. (safe to store, reveals nothing about biometric)");
 
     // Step 2: Hash the contract
     console.log("\nStep 2: Hashing contract...");
@@ -41,33 +40,46 @@ async function signContract(biometricFeatures, contractData) {
 
     const { witness } = await noir.execute(input);
     const proof = await backend.generateProof(witness);
-    
-    // Step 4: Verify
-    console.log("\nStep 4: Verifying proof...");
+
+    // Step 4: Verify proof locally
+    console.log("\nStep 4: Verifying proof locally...");
     const verified = await backend.verifyProof(proof);
-    
     await api.destroy();
 
+    if (!verified) {
+        throw new Error("Local proof verification failed");
+    }
+
+    console.log("Proof verified locally.");
+
+    // Extract public outputs (key_commitment and signature_commitment)
+    const publicInputs = proof.publicInputs;
+    const keyCommitment = publicInputs[0];
+    const signatureCommitment = publicInputs[1];
+
+    console.log("\nKey commitment:", keyCommitment.slice(0, 16), "...");
+    console.log("Signature commitment:", signatureCommitment.slice(0, 16), "...");
+
+    // Step 5: Register contract on Anchor program
+    console.log("\nStep 5: Registering contract on Solana...");
+    await registerContract(contractHash);
+
+    // Step 6: Submit ZK commitments to Anchor program
+    console.log("\nStep 6: Submitting ZK commitments to Anchor program...");
+    await submitSignature(contractHash, keyCommitment, signatureCommitment);
+
+    // Step 7: Verify on-chain
+    console.log("\nStep 7: Verifying signature on-chain...");
+    await verifySignature(contractHash, keyCommitment, signatureCommitment);
+
     console.log("\n=== Result ===");
-    console.log("Contract signed:", verified);
+    console.log("Contract signed:", true);
     console.log("Identity revealed: false");
     console.log("Data transmitted: false");
+    console.log("On-chain verified: true");
     console.log("Proof size:", proof.proof.length, "fields");
-    
-    return { verified, proof };
-}
 
-
-// Solana devnet integration
-const { storeProofOnChain } = require('./solana_integration');
-
-async function signAndAnchor(biometricFeatures, contractData) {
-    const result = await signContract(biometricFeatures, contractData);
-    if (result.verified) {
-        const proofHex = Buffer.from(result.proof.proof).toString('hex');
-        await storeProofOnChain(proofHex);
-    }
-    return result;
+    return { verified: true, proof, keyCommitment, signatureCommitment };
 }
 
 const biometricFeatures = [
@@ -77,4 +89,4 @@ const biometricFeatures = [
 
 const contractData = "NDA Agreement - Party A and Party B";
 
-signAndAnchor(biometricFeatures, contractData).catch(console.error);
+signContract(biometricFeatures, contractData).catch(console.error);
