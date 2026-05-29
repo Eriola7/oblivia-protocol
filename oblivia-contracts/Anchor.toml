@@ -5,12 +5,12 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-oblivia_contracts = "8JCmxZrdwiUki2Vr1UbS5LoevXSNpPwohxUCKndopcZG"
+[programs.devnet]
+oblivia_contracts = "HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG"
 
 [provider]
-cluster = "localnet"
-wallet = "~/.config/solana/id.json"
+cluster = "devnet"
+wallet = "~/.config/solana/oblivia-devnet.json"
 
 [scripts]
 test = "cargo test"

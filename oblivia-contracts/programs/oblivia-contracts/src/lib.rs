@@ -13,7 +13,7 @@ pub use instructions::register_contract::*;
 pub use instructions::submit_signature::*;
 pub use instructions::verify_signature::*;
 
-declare_id!("8JCmxZrdwiUki2Vr1UbS5LoevXSNpPwohxUCKndopcZG");
+declare_id!("HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG");
 
 #[program]
 pub mod oblivia_contracts {
