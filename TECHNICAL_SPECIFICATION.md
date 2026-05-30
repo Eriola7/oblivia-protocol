@@ -55,23 +55,26 @@ fn main(
     contract_hash: [u8; 32],
     signer_key: Field,
     timestamp: u64
-) -> pub [u8; 32] {
+) -> pub (Field, Field) {
     assert(signer_key != 0);
     assert(timestamp > 0);
-    contract_hash
+    let key_commitment = std::hash::pedersen_hash([signer_key]);
+    let mut field_low: Field = 0;
+    let mut field_high: Field = 0;
+    for i in 0..16 { field_low = field_low * 256 + contract_hash[i] as Field; }
+    for i in 16..32 { field_high = field_high * 256 + contract_hash[i] as Field; }
+    let signature_commitment = std::hash::pedersen_hash([
+        signer_key, field_low, field_high, timestamp as Field
+    ]);
+    (key_commitment, signature_commitment)
 }
 ```
 
-This circuit:
-- Takes private inputs (contract hash, signer key, timestamp)
-- Asserts cryptographic validity constraints
-- Returns the contract hash as a public output for on-chain verification
-- Produces a 500-field UltraHonk proof
-- Verifies in under 1 second
-
-The signer key is **never revealed** in the proof. The verifier learns only that a valid, non-zero key committed to this specific contract at this specific time. This is the mathematical guarantee of zero identity disclosure.
-
----
+This circuit produces two public outputs:
+- key_commitment: Pedersen hash of signer_key — proves identity without revealing it
+- signature_commitment: Pedersen hash of (signer_key, contract_hash, timestamp) — binds proof to specific contract and timestamp, prevents proof reuse
+- Full 32-byte contract hash encoded across two Field elements
+- 500-field UltraHonk proof, 2 public inputs, verifies in under 1 second
 
 ## 3. Biometric Entropy Derivation
 
