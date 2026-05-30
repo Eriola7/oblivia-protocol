@@ -12,6 +12,8 @@ pub use instructions::initialize::*;
 pub use instructions::register_contract::*;
 pub use instructions::submit_signature::*;
 pub use instructions::verify_signature::*;
+pub use instructions::create_multisig::*;
+pub use instructions::finalize_multisig::*;
 
 declare_id!("HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG");
 
@@ -33,5 +35,13 @@ pub mod oblivia_contracts {
 
     pub fn verify_signature(ctx: Context<VerifySignature>) -> Result<()> {
         instructions::verify_signature::verify_signature_handler(ctx)
+    }
+
+    pub fn create_multisig(ctx: Context<CreateMultiSig>, contract_hash: [u8; 32], threshold: u8, max_signers: u8) -> Result<()> {
+        instructions::create_multisig::create_multisig_handler(ctx, contract_hash, threshold, max_signers)
+    }
+
+    pub fn finalize_multisig(ctx: Context<FinalizeMultiSig>, contract_hash: [u8; 32]) -> Result<()> {
+        instructions::finalize_multisig::finalize_multisig_handler(ctx, contract_hash)
     }
 }
