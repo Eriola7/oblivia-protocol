@@ -26,6 +26,9 @@ pub fn submit_signature_handler(
     registry.total_signatures += 1;
 
     msg!("Signature submitted. Key commitment: {:?}", key_commitment);
+    msg!("Identity revealed: false");
+    msg!("Data transmitted: false");
+
     Ok(())
 }
 
