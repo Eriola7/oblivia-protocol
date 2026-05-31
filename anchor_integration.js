@@ -5,6 +5,7 @@ const anchor = require('@coral-xyz/anchor');
 const PROGRAM_ID = new PublicKey('HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG');
 const REGISTRY_SEED = Buffer.from('oblivia_registry');
 const CONTRACT_SEED = Buffer.from('oblivia_contract');
+const MULTISIG_SEED = Buffer.from("oblivia_multisig");
 const SIGNATURE_SEED = Buffer.from('oblivia_signature');
 
 const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
@@ -55,7 +56,7 @@ async function registerContract(contractHash) {
     const provider = getProvider(keypair);
     const program = await getProgram(provider);
 
-    const contractHashBytes = Buffer.from(contractHash);
+    const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
 
     const [registryPda] = PublicKey.findProgramAddressSync(
         [REGISTRY_SEED],
@@ -96,7 +97,7 @@ async function submitSignature(contractHash, keyCommitment, signatureCommitment)
     const provider = getProvider(keypair);
     const program = await getProgram(provider);
 
-    const contractHashBytes = Buffer.from(contractHash);
+    const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
     const keyCommitmentBytes = Buffer.from(keyCommitment.replace('0x', '').padEnd(64, '0'), 'hex').slice(0, 32);
     const sigCommitmentBytes = Buffer.from(signatureCommitment.replace('0x', '').padEnd(64, '0'), 'hex').slice(0, 32);
 
@@ -148,7 +149,7 @@ async function verifySignature(contractHash, keyCommitment, signatureCommitment)
     const provider = getProvider(keypair);
     const program = await getProgram(provider);
 
-    const contractHashBytes = Buffer.from(contractHash);
+    const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
     const keyCommitmentBytes = Buffer.from(keyCommitment.replace('0x', '').padEnd(64, '0'), 'hex').slice(0, 32);
     const sigCommitmentBytes = Buffer.from(signatureCommitment.replace('0x', '').padEnd(64, '0'), 'hex').slice(0, 32);
 
@@ -176,4 +177,59 @@ async function verifySignature(contractHash, keyCommitment, signatureCommitment)
     return tx;
 }
 
-module.exports = { initializeRegistry, registerContract, submitSignature, verifySignature };
+module.exports = { initializeRegistry, registerContract, submitSignature, verifySignature, createMultisig, finalizeMultisig };
+
+async function createMultisig(contractHash, threshold, maxSigners) {
+    const keypair = getKeypair();
+    const provider = getProvider(keypair);
+    const program = await getProgram(provider);
+
+    const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
+
+    const [contractPda] = PublicKey.findProgramAddressSync(
+        [CONTRACT_SEED, contractHashBytes], PROGRAM_ID
+    );
+    const [multisigPda] = PublicKey.findProgramAddressSync(
+        [MULTISIG_SEED, contractHashBytes], PROGRAM_ID
+    );
+
+    const existing = await connection.getAccountInfo(multisigPda);
+    if (existing) {
+        console.log('MultiSig already exists:', multisigPda.toString());
+        return { multisigPda, tx: null };
+    }
+
+    const tx = await program.methods
+        .createMultisig(Array.from(contractHashBytes), threshold, maxSigners)
+        .accounts({ contract: contractPda, multisig: multisigPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
+        .signers([keypair])
+        .rpc();
+
+    console.log('MultiSig created. Transaction:', tx);
+    console.log('Explorer: https://explorer.solana.com/tx/' + tx + '?cluster=devnet');
+    return { multisigPda, tx };
+}
+
+async function finalizeMultisig(contractHash) {
+    const keypair = getKeypair();
+    const provider = getProvider(keypair);
+    const program = await getProgram(provider);
+
+    const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
+
+    const [multisigPda] = PublicKey.findProgramAddressSync(
+        [MULTISIG_SEED, contractHashBytes], PROGRAM_ID
+    );
+
+    const [contractPda] = PublicKey.findProgramAddressSync(
+        [CONTRACT_SEED, contractHashBytes], PROGRAM_ID
+    );
+    const tx = await program.methods
+        .finalizeMultisig(Array.from(contractHashBytes))
+        .accounts({ contract: contractPda, multisig: multisigPda })
+        .rpc();
+
+    console.log('MultiSig finalized. Transaction:', tx);
+    console.log('Explorer: https://explorer.solana.com/tx/' + tx + '?cluster=devnet');
+    return tx;
+}
