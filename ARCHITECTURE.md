@@ -27,7 +27,7 @@ It produces a zero-knowledge proof that a unique cryptographic actor committed t
 
 **Why UltraHonk:** UltraHonk is more efficient than Groth16 for circuits of this complexity — smaller proof sizes, faster verification, and no trusted setup requirement.
 
-Proof output: 500 fields, 32 public inputs, verified in under 1 second.
+Proof output: 500 fields, 2 public inputs (key_commitment and signature_commitment), verified in under 1 second.
 
 ---
 
@@ -68,10 +68,32 @@ All processing happens on the user's device. Nothing is transmitted. Nothing is 
 
 ---
 
-### 4. Integration Layer (`/integration.js`)
+### 4. Anchor Smart Contract Program (`/oblivia-contracts`)
 
-Node.js integration connecting all components:
-Demonstrated end-to-end: biometric input produces a signing key, that key signs a contract hash, a ZK proof is generated and verified. Contract signed: true. Identity revealed: false.
+Deployed on Solana devnet. Program ID: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG
+
+Six on-chain instructions:
+- initialize: Creates global ContractRegistry PDA
+- register_contract: Stores contract hash on-chain with timestamp
+- submit_signature: Stores ZK proof commitments (key_commitment, signature_commitment) on-chain
+- verify_signature: Verifies signature is valid and linked to contract
+- create_multisig: Creates anonymous M-of-N threshold signing contract
+- finalize_multisig: Finalizes when signature threshold is reached
+
+Anonymous multi-sig enables any threshold of parties to co-sign a contract with full cryptographic proof of consent and zero identity disclosure.
+
+### 5. Integration Layer (`/integration.js`)
+
+Full end-to-end pipeline:
+1. Biometric features captured
+2. Fuzzy extractor derives signing key
+3. Noir ZK circuit generates UltraHonk proof
+4. Proof verified locally
+5. Contract registered on Anchor program on-chain
+6. ZK commitments submitted to Anchor program
+7. Signature verified through Anchor program on-chain
+
+Output: Contract signed: true. Identity revealed: false. Data transmitted: false. On-chain verified: true.
 
 ---
 
@@ -80,17 +102,17 @@ Demonstrated end-to-end: biometric input produces a signing key, that key signs 
 ### 5. Smart Legal Object Layer — SLOL (`/slol`) — Milestone 2
 Open standard for representing legal agreements as on-chain objects. Supports NDAs, contributor agreements, DAO governance decisions, whistleblower agreements, inheritance. Built on Anchor.
 
-### 6. Anchor Smart Contract Suite — Milestone 3
-On-chain contract storage, multi-signature flows, time-locks, revocation conditions. Full developer SDK. Public testnet deployment.
+### 7. Anchor SDK + Full Testnet MVP — Milestone 3
+On-chain ZK proof verifier, time-locks, revocation conditions. Full developer SDK. Public testnet deployment. (Anchor program deployed — SDK packaging in progress)
 
-### 7. Validator Witness Network — Milestone 4
+### 8. Validator Witness Network — Milestone 4
 Lightweight Solana validator extension for timestamping and notarizing contract signatures. Permissionless node operation.
 
-### 8. Reference dApps — Milestone 5
+### 9. Reference dApps — Milestone 5
 - Anonymous Document Signing tool
 - DAO Anonymous Governance Agreement tool
 
-### 9. Security Audit + Mainnet — Milestone 6
+### 10. Security Audit + Mainnet — Milestone 6
 Independent third-party audit of ZK circuits, biometric client, and smart contracts. Full mainnet deployment.
 
 ---
