@@ -1,0 +1,63 @@
+{
+  "version": "1.0.0",
+  "protocol": "oblivia",
+  "description": "Smart Legal Object Layer — open standard for zero-identity on-chain legal agreements",
+  "types": {
+    "NDA": {
+      "description": "Non-disclosure agreement between two or more parties",
+      "required_fields": ["contract_hash", "effective_date", "expiry_date", "jurisdiction"],
+      "optional_fields": ["scope", "exclusions", "remedy"],
+      "signing": "single or multisig",
+      "min_signers": 2
+    },
+    "ContributorAgreement": {
+      "description": "DAO or project contributor agreement",
+      "required_fields": ["contract_hash", "effective_date", "scope_of_work", "compensation"],
+      "optional_fields": ["ip_assignment", "termination_conditions"],
+      "signing": "single",
+      "min_signers": 1
+    },
+    "GovernanceDecision": {
+      "description": "DAO governance vote or proposal agreement",
+      "required_fields": ["contract_hash", "proposal_id", "voting_threshold", "quorum"],
+      "optional_fields": ["execution_conditions", "timelock_duration"],
+      "signing": "multisig",
+      "min_signers": 2
+    },
+    "WhistleblowerAgreement": {
+      "description": "Anonymous agreement between journalist and source",
+      "required_fields": ["contract_hash", "effective_date", "disclosure_scope"],
+      "optional_fields": ["publication_embargo", "source_protections"],
+      "signing": "multisig",
+      "min_signers": 2
+    },
+    "InheritanceDirective": {
+      "description": "On-chain asset transfer and inheritance instruction",
+      "required_fields": ["contract_hash", "effective_date", "trigger_conditions", "asset_references"],
+      "optional_fields": ["timelock_duration", "executor_key_commitment"],
+      "signing": "single",
+      "min_signers": 1
+    },
+    "ZeroIDDeal": {
+      "description": "Fully anonymous multi-party commercial agreement",
+      "required_fields": ["contract_hash", "effective_date", "terms_hash"],
+      "optional_fields": ["arbitration_conditions", "payment_conditions"],
+      "signing": "multisig",
+      "min_signers": 2
+    }
+  },
+  "on_chain_representation": {
+    "contract_hash": "SHA-256 of agreement content — 32 bytes stored on-chain via Anchor program",
+    "key_commitment": "Pedersen hash of signer biometric key — proves identity without revealing it",
+    "signature_commitment": "Pedersen hash of (signer_key, contract_hash, timestamp) — non-repudiable proof of signing",
+    "multisig_threshold": "M-of-N threshold stored in MultiSigContract account",
+    "timestamp": "Unix timestamp of signing — anchored on Solana"
+  },
+  "zero_identity_guarantee": {
+    "biometric_data_transmitted": false,
+    "biometric_data_stored": false,
+    "signer_identity_revealed": false,
+    "proof_verifiable": true,
+    "non_repudiable": true
+  }
+}
