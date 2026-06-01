@@ -1,4 +1,7 @@
 const { sha256 } = require('@noble/hashes/sha2.js');
+const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
+const { Noir } = require('@noir-lang/noir_js');
+const circuit = require('../../zk_intent_circuit/target/zk_intent_circuit.json');
 const tf = require('@tensorflow/tfjs');
 const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
 
@@ -152,14 +155,23 @@ window.signContract = async function() {
     log('Contract hash computed');
     
     log('Generating ZK proof... (this takes a moment)');
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
+    const api = await Barretenberg.new({ threads: 1 });
+    const backend = new UltraHonkBackend(circuit.bytecode, api);
+    const noir = new Noir(circuit);
+    const input = {
+        contract_hash: contractHash,
+        signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
+        timestamp: Date.now().toString()
+    };
+    const { witness } = await noir.execute(input);
+    const proof = await backend.generateProof(witness);
+    const zkVerified = await backend.verifyProof(proof);
+    await api.destroy();
+    if (!zkVerified) { log('Proof verification failed'); return; }
     log('Proof generated successfully', 'success');
     log('Verifying proof...');
-    await new Promise(resolve => setTimeout(resolve, 500));
     log('Proof verified', 'success');
-    
-    const proofPreview = signingKey.slice(0, 16) + '...';
+    const proofPreview = Buffer.from(proof.proof).toString('hex').slice(0, 16) + '...';
     document.getElementById('proofDisplay').textContent = proofPreview;
     document.getElementById('result').classList.add('show');
     document.getElementById('signBtn').disabled = false;
