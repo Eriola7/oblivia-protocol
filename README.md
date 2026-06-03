@@ -15,7 +15,8 @@ No government ID. No KYC. No centralized server. No fees. Ever.
 | Browser Client | ✅ Complete | TensorFlow + MediaPipe, on-device biometric key derivation |
 | Node.js Integration | ✅ Complete | Biometric to ZK proof to Anchor program to on-chain verified |
 | Anchor Smart Contracts | ✅ Deployed | Program ID: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG - 7 instructions |
-| On-chain ZK Commitment Storage | ✅ Live | ZK commitments stored on-chain via Anchor program — full proof verification scoped Milestone 3 |
+| On-chain ZK Proof Verification | ✅ Live | Groth16 proof verified on Solana devnet via alt_bn128 pairing syscalls — 93,609 CU |
+| Groth16 Circuit | ✅ Complete | Circom circuit, trusted setup, 482 constraints, 2 public outputs |
 | Multi-sig Support | ✅ Complete | Anonymous M-of-N threshold signing — create, submit, finalize on-chain |
 | SLOL v1 Schema | 🔨 In Progress | Schema design started — NDA, DAO governance, whistleblower, inheritance, ZeroIDDeal. Full standard and jurisdictional compliance documentation in development |
 | TypeScript Tests | ✅ 6/6 passing | Full test suite running against Solana devnet |
