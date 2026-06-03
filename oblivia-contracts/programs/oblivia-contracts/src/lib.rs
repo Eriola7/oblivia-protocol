@@ -15,6 +15,7 @@ pub use instructions::verify_signature::*;
 pub use instructions::create_multisig::*;
 pub use instructions::finalize_multisig::*;
 pub use instructions::submit_multisig_signature::*;
+pub use instructions::verify_groth16::*;
 
 declare_id!("HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG");
 
@@ -44,6 +45,10 @@ pub mod oblivia_contracts {
 
     pub fn submit_multisig_signature(ctx: Context<SubmitMultiSigSignature>, key_commitment: [u8; 32], signature_commitment: [u8; 32]) -> Result<()> {
         instructions::submit_multisig_signature::submit_multisig_signature_handler(ctx, key_commitment, signature_commitment)
+    }
+
+    pub fn verify_groth16(ctx: Context<VerifyGroth16>, proof_a: [u8; 64], proof_b: [u8; 128], proof_c: [u8; 64], pub_inputs: [u8; 64]) -> Result<()> {
+        instructions::verify_groth16::verify_groth16_handler(ctx, proof_a, proof_b, proof_c, pub_inputs)
     }
 
     pub fn finalize_multisig(ctx: Context<FinalizeMultiSig>, contract_hash: [u8; 32]) -> Result<()> {

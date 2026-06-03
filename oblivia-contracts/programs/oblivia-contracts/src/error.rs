@@ -12,4 +12,8 @@ pub enum ObliviaError {
     InvalidSignatureCommitment,
     #[msg("Duplicate signature")]
     DuplicateSignature,
+    #[msg("Pairing computation failed")]
+    PairingFailed,
+    #[msg("Invalid Groth16 proof")]
+    InvalidProof,
 }
