@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
-use crate::state::{ContractRegistry, Contract, ObliviaSignature};
-use crate::constants::{REGISTRY_SEED, CONTRACT_SEED, SIGNATURE_SEED};
+use crate::state::{ContractRegistry, Contract, ObliviaSignature, SignerRecord};
+use crate::constants::{REGISTRY_SEED, CONTRACT_SEED, SIGNATURE_SEED, SIGNER_RECORD_SEED};
 use crate::error::ObliviaError;
 
 pub fn submit_signature_handler(
@@ -11,6 +11,13 @@ pub fn submit_signature_handler(
     require!(ctx.accounts.contract.active, ObliviaError::ContractInactive);
     require!(key_commitment != [0u8; 32], ObliviaError::InvalidKeyCommitment);
     require!(signature_commitment != [0u8; 32], ObliviaError::InvalidSignatureCommitment);
+
+    // Record signer — PDA init fails if same key signs same contract twice
+    let signer_record = &mut ctx.accounts.signer_record;
+    signer_record.contract = ctx.accounts.contract.key();
+    signer_record.key_commitment = key_commitment;
+    signer_record.timestamp = Clock::get()?.unix_timestamp;
+    signer_record.bump = ctx.bumps.signer_record;
 
     let contract = &mut ctx.accounts.contract;
     let signature = &mut ctx.accounts.signature;
@@ -41,6 +48,12 @@ pub struct SubmitSignature<'info> {
         seeds = [SIGNATURE_SEED, &key_commitment, &signature_commitment], bump
     )]
     pub signature: Account<'info, ObliviaSignature>,
+    /// Deduplication PDA — init fails if same key signs same contract twice
+    #[account(
+        init, payer = payer, space = SignerRecord::LEN,
+        seeds = [SIGNER_RECORD_SEED, &contract.contract_hash, &key_commitment], bump
+    )]
+    pub signer_record: Account<'info, SignerRecord>,
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,

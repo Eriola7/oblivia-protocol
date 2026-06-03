@@ -82,3 +82,17 @@ pub struct MultiSigMember {
 impl MultiSigMember {
     pub const LEN: usize = 8 + 32 + 32 + 8 + 1;
 }
+
+/// Tracks a unique signer on a contract
+/// PDA existence prevents same key from signing same contract twice
+#[account]
+pub struct SignerRecord {
+    pub contract: Pubkey,
+    pub key_commitment: [u8; 32],
+    pub timestamp: i64,
+    pub bump: u8,
+}
+
+impl SignerRecord {
+    pub const LEN: usize = 8 + 32 + 32 + 8 + 1;
+}
