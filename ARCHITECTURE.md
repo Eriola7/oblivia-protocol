@@ -100,7 +100,7 @@ Output: Contract signed: true. Identity revealed: false. Data transmitted: false
 
 ## What Is Being Built
 
-### 5. Smart Legal Object Layer — SLOL (`/slol`) — Milestone 2
+### 5. Smart Legal Object Layer — SLOL (`/slol`) — Milestone 2 (In Progress)
 Open standard for representing legal agreements as on-chain objects. Supports NDAs, contributor agreements, DAO governance decisions, whistleblower agreements, inheritance. Built on Anchor.
 
 ### 7. Anchor SDK + Full Testnet MVP — Milestone 3

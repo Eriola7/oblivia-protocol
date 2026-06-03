@@ -17,7 +17,7 @@ No government ID. No KYC. No centralized server. No fees. Ever.
 | Anchor Smart Contracts | ✅ Deployed | Program ID: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG - 7 instructions |
 | On-chain ZK Commitment Storage | ✅ Live | ZK commitments stored on-chain via Anchor program — full proof verification scoped Milestone 3 |
 | Multi-sig Support | ✅ Complete | Anonymous M-of-N threshold signing — create, submit, finalize on-chain |
-| SLOL v1 Schema | ✅ Complete | Open standard for zero-identity legal objects — NDA, DAO governance, whistleblower, inheritance, ZeroIDDeal |
+| SLOL v1 Schema | 🔨 In Progress | Schema design started — NDA, DAO governance, whistleblower, inheritance, ZeroIDDeal. Full standard and jurisdictional compliance documentation in development |
 | TypeScript Tests | ✅ 6/6 passing | Full test suite running against Solana devnet |
 | Browser ZK Proof | 🔨 Building | Real Barretenberg WASM - scoped Milestone 3 |
 | Witness Network | 🔨 Building | Permissionless notarization nodes |
