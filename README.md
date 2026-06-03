@@ -15,7 +15,7 @@ No government ID. No KYC. No centralized server. No fees. Ever.
 | Browser Client | Complete | TensorFlow + MediaPipe, on-device biometric key derivation |
 | Node.js Integration | Complete | Biometric to ZK proof to Anchor program to on-chain verified |
 | Anchor Smart Contracts | Deployed | Program ID: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG - 6 instructions |
-| On-chain ZK Verification | Live | ZK commitments stored and verified through Anchor program |
+| On-chain ZK Commitment Storage | Live | ZK commitments stored on-chain via Anchor program — full proof verification scoped Milestone 3 |
 | Multi-sig Support | Complete | Anonymous M-of-N threshold signing - create, submit, finalize on-chain |
 | TypeScript Tests | 6/6 passing | Full test suite running against Solana devnet |
 | Browser ZK Proof | Building | Real Barretenberg WASM - scoped Milestone 3 |

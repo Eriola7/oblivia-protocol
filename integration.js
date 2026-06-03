@@ -21,8 +21,9 @@ async function signContract(biometricFeatures, contractData) {
 
     // Step 2: Hash the contract
     console.log("\nStep 2: Hashing contract...");
+    const crypto = require('crypto');
     const contractHash = Array.from(
-        Buffer.from(contractData.padEnd(32, '\0').slice(0, 32))
+        crypto.createHash('sha256').update(contractData).digest()
     );
     console.log("Contract hash:", contractHash.slice(0, 8), "...");
 

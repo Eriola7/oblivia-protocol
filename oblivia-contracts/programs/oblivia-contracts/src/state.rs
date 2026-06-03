@@ -68,3 +68,17 @@ impl MultiSigContract {
         + 8   // finalized_at
         + 1;  // bump
 }
+
+/// Tracks a unique signer in a multisig
+/// PDA existence prevents duplicate signatures from same key
+#[account]
+pub struct MultiSigMember {
+    pub multisig: Pubkey,
+    pub key_commitment: [u8; 32],
+    pub timestamp: i64,
+    pub bump: u8,
+}
+
+impl MultiSigMember {
+    pub const LEN: usize = 8 + 32 + 32 + 8 + 1;
+}

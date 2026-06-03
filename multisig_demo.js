@@ -12,8 +12,9 @@ async function multiSigDemo() {
     const circuit = require('./zk_intent_circuit/target/zk_intent_circuit.json');
 
     const contractData = "DAO Governance Proposal 1 - Treasury Allocation";
+    const crypto = require('crypto');
     const contractHash = Array.from(
-        Buffer.from(contractData.padEnd(32, '\0').slice(0, 32))
+        crypto.createHash('sha256').update(contractData).digest()
     );
 
     console.log("Registering governance contract on-chain...");

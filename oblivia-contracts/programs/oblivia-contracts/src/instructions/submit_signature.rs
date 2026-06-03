@@ -25,34 +25,20 @@ pub fn submit_signature_handler(
     contract.signature_count += 1;
     registry.total_signatures += 1;
 
-    msg!("Signature submitted. Key commitment: {:?}", key_commitment);
-    msg!("Identity revealed: false");
-    msg!("Data transmitted: false");
-
+    msg!("Signature submitted. Key commitment: {:?}", &key_commitment[..8]);
     Ok(())
 }
 
 #[derive(Accounts)]
 #[instruction(key_commitment: [u8; 32], signature_commitment: [u8; 32])]
 pub struct SubmitSignature<'info> {
-    #[account(
-        mut,
-        seeds = [REGISTRY_SEED],
-        bump = registry.bump
-    )]
+    #[account(mut, seeds = [REGISTRY_SEED], bump = registry.bump)]
     pub registry: Account<'info, ContractRegistry>,
-    #[account(
-        mut,
-        seeds = [CONTRACT_SEED, &contract.contract_hash],
-        bump = contract.bump
-    )]
+    #[account(mut, seeds = [CONTRACT_SEED, &contract.contract_hash], bump = contract.bump)]
     pub contract: Account<'info, Contract>,
     #[account(
-        init,
-        payer = payer,
-        space = ObliviaSignature::LEN,
-        seeds = [SIGNATURE_SEED, &key_commitment, &signature_commitment],
-        bump
+        init, payer = payer, space = ObliviaSignature::LEN,
+        seeds = [SIGNATURE_SEED, &key_commitment, &signature_commitment], bump
     )]
     pub signature: Account<'info, ObliviaSignature>,
     #[account(mut)]
