@@ -154,7 +154,7 @@ The Oblivia browser client:
 
 Deliverables completed:
 - Noir ZK intent circuit — compiled, tested, proof generation verified
-- UltraHonk backend integration — 500-field proof, 32 public inputs
+- UltraHonk backend integration — 500-field proof, 2 public inputs
 - Fuzzy extractor implementation — all three key properties validated
 - TensorFlow MediaPipe browser client — real face landmark detection
 - Node.js end-to-end integration — biometric → key → ZK proof → verified
