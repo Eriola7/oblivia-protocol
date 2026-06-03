@@ -1,63 +1,195 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oblivia.protocol/slol/v1/schema.json",
+  "title": "Smart Legal Object Layer v1",
+  "description": "Open standard for representing legal agreements as composable on-chain objects. Zero identity required. All parties identified by cryptographic commitments only.",
   "version": "1.0.0",
-  "protocol": "oblivia",
-  "description": "Smart Legal Object Layer — open standard for zero-identity on-chain legal agreements",
-  "types": {
-    "NDA": {
-      "description": "Non-disclosure agreement between two or more parties",
-      "required_fields": ["contract_hash", "effective_date", "expiry_date", "jurisdiction"],
-      "optional_fields": ["scope", "exclusions", "remedy"],
-      "signing": "single or multisig",
-      "min_signers": 2
+  "definitions": {
+    "Party": {
+      "type": "object",
+      "description": "A signatory identified only by their ZK key commitment. No name. No identity.",
+      "required": ["key_commitment", "signature_commitment"],
+      "properties": {
+        "key_commitment": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$",
+          "description": "Pedersen hash of signer's biometric-derived key. Proves unique identity without revealing it."
+        },
+        "signature_commitment": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$",
+          "description": "Pedersen hash binding signer key + contract hash + timestamp. Non-repudiable."
+        },
+        "timestamp": {
+          "type": "integer",
+          "description": "Unix timestamp of signing"
+        },
+        "on_chain_tx": {
+          "type": "string",
+          "description": "Solana transaction signature confirming on-chain submission"
+        }
+      }
     },
-    "ContributorAgreement": {
-      "description": "DAO or project contributor agreement",
-      "required_fields": ["contract_hash", "effective_date", "scope_of_work", "compensation"],
-      "optional_fields": ["ip_assignment", "termination_conditions"],
-      "signing": "single",
-      "min_signers": 1
-    },
-    "GovernanceDecision": {
-      "description": "DAO governance vote or proposal agreement",
-      "required_fields": ["contract_hash", "proposal_id", "voting_threshold", "quorum"],
-      "optional_fields": ["execution_conditions", "timelock_duration"],
-      "signing": "multisig",
-      "min_signers": 2
-    },
-    "WhistleblowerAgreement": {
-      "description": "Anonymous agreement between journalist and source",
-      "required_fields": ["contract_hash", "effective_date", "disclosure_scope"],
-      "optional_fields": ["publication_embargo", "source_protections"],
-      "signing": "multisig",
-      "min_signers": 2
-    },
-    "InheritanceDirective": {
-      "description": "On-chain asset transfer and inheritance instruction",
-      "required_fields": ["contract_hash", "effective_date", "trigger_conditions", "asset_references"],
-      "optional_fields": ["timelock_duration", "executor_key_commitment"],
-      "signing": "single",
-      "min_signers": 1
-    },
-    "ZeroIDDeal": {
-      "description": "Fully anonymous multi-party commercial agreement",
-      "required_fields": ["contract_hash", "effective_date", "terms_hash"],
-      "optional_fields": ["arbitration_conditions", "payment_conditions"],
-      "signing": "multisig",
-      "min_signers": 2
+    "ContractBase": {
+      "type": "object",
+      "required": ["slol_version", "contract_type", "contract_hash", "created_at"],
+      "properties": {
+        "slol_version": { "type": "string", "const": "1.0.0" },
+        "contract_type": {
+          "type": "string",
+          "enum": ["NDA", "ContributorAgreement", "GovernanceDecision", "WhistleblowerAgreement", "InheritanceDirective", "ZeroIDDeal"]
+        },
+        "contract_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 hash of full contract content"
+        },
+        "created_at": { "type": "integer" },
+        "on_chain_program": {
+          "type": "string",
+          "description": "Solana program ID — HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG"
+        },
+        "network": {
+          "type": "string",
+          "enum": ["mainnet-beta", "devnet", "testnet"]
+        },
+        "parties": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Party" },
+          "minItems": 1
+        },
+        "multisig": {
+          "type": "object",
+          "properties": {
+            "threshold": { "type": "integer", "minimum": 1 },
+            "max_signers": { "type": "integer", "minimum": 1 },
+            "finalized": { "type": "boolean" },
+            "finalized_at": { "type": "integer" }
+          }
+        }
+      }
     }
   },
-  "on_chain_representation": {
-    "contract_hash": "SHA-256 of agreement content — 32 bytes stored on-chain via Anchor program",
-    "key_commitment": "Pedersen hash of signer biometric key — proves identity without revealing it",
-    "signature_commitment": "Pedersen hash of (signer_key, contract_hash, timestamp) — non-repudiable proof of signing",
-    "multisig_threshold": "M-of-N threshold stored in MultiSigContract account",
-    "timestamp": "Unix timestamp of signing — anchored on Solana"
-  },
-  "zero_identity_guarantee": {
-    "biometric_data_transmitted": false,
-    "biometric_data_stored": false,
-    "signer_identity_revealed": false,
-    "proof_verifiable": true,
-    "non_repudiable": true
-  }
+  "oneOf": [
+    {
+      "title": "NDA",
+      "description": "Non-disclosure agreement. Parties commit to confidentiality without revealing identity.",
+      "allOf": [
+        { "$ref": "#/definitions/ContractBase" },
+        {
+          "properties": {
+            "contract_type": { "const": "NDA" },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "confidentiality_period_days": { "type": "integer" },
+                "scope": { "type": "string" },
+                "jurisdiction": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "ContributorAgreement",
+      "description": "DAO or open-source contributor agreement. Contributor retains pseudonymity.",
+      "allOf": [
+        { "$ref": "#/definitions/ContractBase" },
+        {
+          "properties": {
+            "contract_type": { "const": "ContributorAgreement" },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "project": { "type": "string" },
+                "ip_assignment": { "type": "boolean" },
+                "compensation_type": { "type": "string", "enum": ["token", "fiat", "equity", "none"] }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "GovernanceDecision",
+      "description": "DAO governance agreement. All voters anonymous. Threshold signatures enforce quorum.",
+      "allOf": [
+        { "$ref": "#/definitions/ContractBase" },
+        {
+          "properties": {
+            "contract_type": { "const": "GovernanceDecision" },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "proposal_hash": { "type": "string" },
+                "quorum_threshold": { "type": "integer" },
+                "vote_type": { "type": "string", "enum": ["simple_majority", "supermajority", "unanimous"] }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "WhistleblowerAgreement",
+      "description": "Journalist-source agreement. Proves consent to disclosure without identity trail.",
+      "allOf": [
+        { "$ref": "#/definitions/ContractBase" },
+        {
+          "properties": {
+            "contract_type": { "const": "WhistleblowerAgreement" },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "disclosure_scope": { "type": "string" },
+                "expiry_timestamp": { "type": "integer" },
+                "revocable": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "InheritanceDirective",
+      "description": "On-chain inheritance. Asset transfer conditions enforced programmatically. No lawyers required.",
+      "allOf": [
+        { "$ref": "#/definitions/ContractBase" },
+        {
+          "properties": {
+            "contract_type": { "const": "InheritanceDirective" },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "trigger_condition": { "type": "string", "enum": ["time_lock", "oracle_condition", "multisig_confirmation"] },
+                "trigger_timestamp": { "type": "integer" },
+                "asset_references": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "ZeroIDDeal",
+      "description": "Fully anonymous multi-party deal. All signers pseudonymous. Non-repudiable by construction.",
+      "allOf": [
+        { "$ref": "#/definitions/ContractBase" },
+        {
+          "properties": {
+            "contract_type": { "const": "ZeroIDDeal" },
+            "terms": {
+              "type": "object",
+              "properties": {
+                "deal_hash": { "type": "string" },
+                "required_signers": { "type": "integer" },
+                "expiry_timestamp": { "type": "integer" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
 }
