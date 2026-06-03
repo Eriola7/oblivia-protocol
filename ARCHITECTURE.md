@@ -72,12 +72,13 @@ All processing happens on the user's device. Nothing is transmitted. Nothing is 
 
 Deployed on Solana devnet. Program ID: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG
 
-Six on-chain instructions:
+Seven on-chain instructions:
 - initialize: Creates global ContractRegistry PDA
 - register_contract: Stores contract hash on-chain with timestamp
 - submit_signature: Stores ZK proof commitments (key_commitment, signature_commitment) on-chain
 - verify_signature: Verifies signature is valid and linked to contract
 - create_multisig: Creates anonymous M-of-N threshold signing contract
+- submit_multisig_signature: Submits ZK commitments to multisig — PDA deduplication prevents duplicate signatures
 - finalize_multisig: Finalizes when signature threshold is reached
 
 Anonymous multi-sig enables any threshold of parties to co-sign a contract with full cryptographic proof of consent and zero identity disclosure.
