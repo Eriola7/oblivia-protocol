@@ -3,3 +3,7 @@ dist/
 .env
 *.env
 .DS_Store
+zk_groth16/*.ptau
+zk_groth16/*.zkey
+zk_groth16/*.wtns
+zk_groth16/node_modules/
