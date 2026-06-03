@@ -66,3 +66,17 @@ Run the real proving pipeline: npm install && node integration.js
 ## License
 
 MIT - free to use, fork, and build on forever.
+
+## Groth16 On-Chain Verification
+
+Real ZK proof verified on Solana devnet using alt_bn128 pairing syscalls:
+
+**Transaction:** `3wsxfRkPJhR4L5j1yAnezvMQaY1sAYry2nFqa3JyNS8G2ZzjaH6DoXUzYcQr4PgeC2Jx1V99UMworsC7iyLmfVET`
+
+**Explorer:** https://explorer.solana.com/tx/3wsxfRkPJhR4L5j1yAnezvMQaY1sAYry2nFqa3JyNS8G2ZzjaH6DoXUzYcQr4PgeC2Jx1V99UMworsC7iyLmfVET?cluster=devnet
+
+- Program: ObliviaContracts — `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`
+- Instruction: VerifyGroth16
+- Compute units: 93,609
+- Result: Success — Finalized
+- Identity revealed: false
