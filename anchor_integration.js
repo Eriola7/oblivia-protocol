@@ -116,6 +116,11 @@ async function submitSignature(contractHash, keyCommitment, signatureCommitment)
         PROGRAM_ID
     );
 
+    const [signerRecordPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from('oblivia_signer_record'), contractHashBytes, keyCommitmentBytes],
+        PROGRAM_ID
+    );
+
     // Check if signature already submitted
     const existing = await connection.getAccountInfo(signaturePda);
     if (existing) {
@@ -133,6 +138,7 @@ async function submitSignature(contractHash, keyCommitment, signatureCommitment)
             registry: registryPda,
             contract: contractPda,
             signature: signaturePda,
+            signerRecord: signerRecordPda,
             payer: keypair.publicKey,
             systemProgram: anchor.web3.SystemProgram.programId,
         })
