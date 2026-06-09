@@ -16,7 +16,6 @@ pub use instructions::create_multisig::*;
 pub use instructions::finalize_multisig::*;
 pub use instructions::submit_multisig_signature::*;
 pub use instructions::verify_groth16::*;
-pub use instructions::submit_signature::*;
 
 declare_id!("HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG");
 
