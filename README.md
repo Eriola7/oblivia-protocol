@@ -14,13 +14,13 @@ No government ID. No KYC. No centralized server. No fees. Ever.
 | Biometric Entropy Client | ✅ Complete | Fuzzy extractor, generate/reproduce API, secure sketch, variance testing |
 | Browser Client | ✅ Complete | TensorFlow + MediaPipe, on-device biometric key derivation |
 | Node.js Integration | ✅ Complete | Biometric to ZK proof to Anchor program to on-chain verified |
-| Anchor Smart Contracts | ✅ Deployed | Program ID: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG - 7 instructions |
+| Anchor Smart Contracts | ✅ Deployed | Program ID: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG - 8 instructions |
 | On-chain ZK Proof Verification | ✅ Live | Groth16 proof verified on Solana devnet via alt_bn128 pairing syscalls — 93,609 CU |
 | Groth16 Circuit | ✅ Complete | Circom circuit, trusted setup, 482 constraints, 2 public outputs |
 | Multi-sig Support | ✅ Complete | Anonymous M-of-N threshold signing — create, submit, finalize on-chain |
 | SLOL v1 Schema | 🔨 In Progress | Schema design started — NDA, DAO governance, whistleblower, inheritance, ZeroIDDeal. Full standard and jurisdictional compliance documentation in development |
 | TypeScript Tests | ✅ 6/6 passing | Full test suite running against Solana devnet |
-| Browser ZK Proof | 🔨 Building | Real Barretenberg WASM - scoped Milestone 3 |
+| Browser ZK Proof | ✅ Complete | Real Barretenberg WASM proving on-device — SDK integration scoped Milestone 3 |
 | Witness Network | 🔨 Building | Permissionless notarization nodes |
 | Reference dApps | 📅 Planned | Anonymous signing and DAO governance tools |
 | Security Audit | 📅 Planned | Independent third-party audit |
@@ -52,14 +52,16 @@ Anchor Tests:
 
 - initialize: Create global contract registry
 - register_contract: Store contract hash on-chain
-- submit_signature: Submit ZK proof commitments
+- submit_signature: Submit ZK proof commitments with SignerRecord PDA deduplication
 - verify_signature: Verify signature on-chain
 - create_multisig: Create M-of-N anonymous multi-sig
+- submit_multisig_signature: Submit ZK commitment to multisig with MultiSigMember deduplication
 - finalize_multisig: Finalize when threshold reached
+- verify_groth16: Verify Groth16 ZK proof on-chain via alt_bn128 syscalls
 
 ## Implementation Notes
 
-Browser ZK proof generation is simulated in the browser client. Real Barretenberg proving runs in integration.js. Browser-native proving is scoped for Milestone 3.
+Browser ZK proof generation runs via real Barretenberg WASM in the browser client. Full Anchor SDK integration for browser-native proving is scoped for Milestone 3.
 
 Run the real proving pipeline: npm install && node integration.js
 
