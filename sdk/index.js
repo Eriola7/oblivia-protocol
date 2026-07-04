@@ -11,7 +11,7 @@
 
 const { Noir } = require('@noir-lang/noir_js');
 const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
-const { generate, reproduce } = require('../biometric-entropy-client/fuzzyExtractor');
+const { generate, reproduce } = require('./lib/fuzzyExtractor');
 const { 
     registerContract, 
     submitSignature, 
@@ -19,9 +19,9 @@ const {
     createMultisig,
     finalizeMultisig,
     initializeRegistry
-} = require('../anchor_integration');
+} = require('./lib/anchor_integration');
 
-const circuit = require('../zk_intent_circuit/target/zk_intent_circuit.json');
+const circuit = require('./lib/circuit.json');
 
 /**
  * Derive a signing key from biometric features

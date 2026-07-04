@@ -1,0 +1,1097 @@
+{
+  "address": "HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG",
+  "metadata": {
+    "name": "oblivia_contracts",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "create_multisig",
+      "discriminator": [
+        148,
+        146,
+        240,
+        10,
+        226,
+        215,
+        167,
+        174
+      ],
+      "accounts": [
+        {
+          "name": "contract",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  97,
+                  99,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "contract_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "contract_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "contract_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        },
+        {
+          "name": "max_signers",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "finalize_multisig",
+      "discriminator": [
+        172,
+        197,
+        180,
+        65,
+        219,
+        97,
+        224,
+        241
+      ],
+      "accounts": [
+        {
+          "name": "contract",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  97,
+                  99,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "_contract_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "_contract_hash"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "contract_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "register_contract",
+      "discriminator": [
+        215,
+        41,
+        228,
+        131,
+        56,
+        222,
+        121,
+        205
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "contract",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  97,
+                  99,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "contract_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "contract_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "submit_multisig_signature",
+      "discriminator": [
+        114,
+        159,
+        106,
+        155,
+        77,
+        135,
+        223,
+        126
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "contract",
+          "writable": true
+        },
+        {
+          "name": "signature",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  115,
+                  105,
+                  103,
+                  110,
+                  97,
+                  116,
+                  117,
+                  114,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "key_commitment"
+              },
+              {
+                "kind": "arg",
+                "path": "signature_commitment"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig",
+          "writable": true
+        },
+        {
+          "name": "multisig_member",
+          "docs": [
+            "Deduplication PDA — init fails if same signer submits twice"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103,
+                  95,
+                  109,
+                  101,
+                  109,
+                  98,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig"
+              },
+              {
+                "kind": "arg",
+                "path": "key_commitment"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "key_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "signature_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "submit_signature",
+      "discriminator": [
+        205,
+        224,
+        80,
+        14,
+        239,
+        119,
+        52,
+        129
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "contract",
+          "writable": true
+        },
+        {
+          "name": "signature",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  115,
+                  105,
+                  103,
+                  110,
+                  97,
+                  116,
+                  117,
+                  114,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "key_commitment"
+              },
+              {
+                "kind": "arg",
+                "path": "signature_commitment"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer_record",
+          "docs": [
+            "Deduplication PDA — init fails if same key signs same contract twice"
+          ],
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "key_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "signature_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "verify_groth16",
+      "discriminator": [
+        228,
+        26,
+        135,
+        7,
+        19,
+        253,
+        172,
+        97
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "proof_a",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "proof_b",
+          "type": {
+            "array": [
+              "u8",
+              128
+            ]
+          }
+        },
+        {
+          "name": "proof_c",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "pub_inputs",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "verify_signature",
+      "discriminator": [
+        91,
+        139,
+        24,
+        69,
+        251,
+        162,
+        245,
+        112
+      ],
+      "accounts": [
+        {
+          "name": "contract"
+        },
+        {
+          "name": "signature"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Contract",
+      "discriminator": [
+        172,
+        138,
+        115,
+        242,
+        121,
+        67,
+        183,
+        26
+      ]
+    },
+    {
+      "name": "ContractRegistry",
+      "discriminator": [
+        33,
+        63,
+        29,
+        131,
+        98,
+        227,
+        26,
+        231
+      ]
+    },
+    {
+      "name": "MultiSigContract",
+      "discriminator": [
+        63,
+        126,
+        229,
+        134,
+        199,
+        15,
+        113,
+        209
+      ]
+    },
+    {
+      "name": "MultiSigMember",
+      "discriminator": [
+        231,
+        101,
+        142,
+        4,
+        93,
+        241,
+        157,
+        60
+      ]
+    },
+    {
+      "name": "ObliviaSignature",
+      "discriminator": [
+        222,
+        143,
+        111,
+        193,
+        23,
+        145,
+        230,
+        110
+      ]
+    },
+    {
+      "name": "SignerRecord",
+      "discriminator": [
+        76,
+        168,
+        87,
+        131,
+        126,
+        74,
+        27,
+        58
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "ContractInactive",
+      "msg": "Contract is no longer active"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidContractHash",
+      "msg": "Invalid contract hash"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidKeyCommitment",
+      "msg": "Invalid key commitment"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidSignatureCommitment",
+      "msg": "Invalid signature commitment"
+    },
+    {
+      "code": 6004,
+      "name": "DuplicateSignature",
+      "msg": "Duplicate signature"
+    },
+    {
+      "code": 6005,
+      "name": "PairingFailed",
+      "msg": "Pairing computation failed"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidProof",
+      "msg": "Invalid Groth16 proof"
+    }
+  ],
+  "types": [
+    {
+      "name": "Contract",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "contract_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "signature_count",
+            "type": "u64"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ContractRegistry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_contracts",
+            "type": "u64"
+          },
+          {
+            "name": "total_signatures",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MultiSigContract",
+      "docs": [
+        "Multi-signature contract account",
+        "Enables M-of-N anonymous signing — any threshold of parties",
+        "can co-sign without any party revealing their identity"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "contract",
+            "docs": [
+              "The underlying contract being multi-signed"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "threshold",
+            "docs": [
+              "Number of signatures required to finalize"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "signatures_collected",
+            "docs": [
+              "Current number of signatures collected"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "max_signers",
+            "docs": [
+              "Maximum signers allowed"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "finalized",
+            "docs": [
+              "Whether threshold has been reached and contract is finalized"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "finalized_at",
+            "docs": [
+              "Timestamp when finalized"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MultiSigMember",
+      "docs": [
+        "Tracks a unique signer in a multisig",
+        "PDA existence prevents duplicate signatures from same key"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "multisig",
+            "type": "pubkey"
+          },
+          {
+            "name": "key_commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ObliviaSignature",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "key_commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "signature_commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "contract",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SignerRecord",
+      "docs": [
+        "Tracks a unique signer on a contract",
+        "PDA existence prevents same key from signing same contract twice"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "contract",
+            "type": "pubkey"
+          },
+          {
+            "name": "key_commitment",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}

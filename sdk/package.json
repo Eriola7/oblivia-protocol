@@ -1,0 +1,24 @@
+{
+  "name": "@oblivia/sdk",
+  "version": "0.1.0",
+  "description": "Zero-identity contract signing for Solana. Sign legally binding agreements with full cryptographic provability and zero identity disclosure.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eriola7/oblivia-protocol.git",
+    "directory": "sdk"
+  },
+  "keywords": ["solana", "zero-knowledge", "zk", "signing", "anonymous", "biometric", "contracts", "anchor"],
+  "dependencies": {
+    "@aztec/bb.js": "^4.2.0",
+    "@coral-xyz/anchor": "^0.32.1",
+    "@noir-lang/noir_js": "^1.0.0-beta.20",
+    "@solana/web3.js": "^1.98.4",
+    "dotenv": "^17.4.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
