@@ -10,7 +10,16 @@
     "url": "git+https://github.com/Eriola7/oblivia-protocol.git",
     "directory": "sdk"
   },
-  "keywords": ["solana", "zero-knowledge", "zk", "signing", "anonymous", "biometric", "contracts", "anchor"],
+  "keywords": [
+    "solana",
+    "zero-knowledge",
+    "zk",
+    "signing",
+    "anonymous",
+    "biometric",
+    "contracts",
+    "anchor"
+  ],
   "dependencies": {
     "@aztec/bb.js": "^4.2.0",
     "@coral-xyz/anchor": "^0.32.1",
@@ -20,5 +29,10 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "exports": {
+    ".": "./index.js",
+    "./browser": "./browser.js"
+  },
+  "browser": "./browser.js"
 }
