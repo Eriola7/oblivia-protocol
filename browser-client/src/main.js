@@ -173,8 +173,35 @@ window.signContract = async function() {
     log('Proof verified', 'success');
     const proofPreview = Buffer.from(proof.proof).toString('hex').slice(0, 16) + '...';
     document.getElementById('proofDisplay').textContent = proofPreview;
+
+    const keyCommitment = '0x' + BigInt(proof.publicInputs[0]).toString(16).padStart(64, '0');
+    const signatureCommitment = '0x' + BigInt(proof.publicInputs[1]).toString(16).padStart(64, '0');
+
+    log('Submitting to Solana... (sponsored — free to you)');
+    try {
+        const response = await fetch(RELAY_URL + '/sign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contractHash: Array.from(contractHash),
+                keyCommitment,
+                signatureCommitment
+            })
+        });
+        const data = await response.json();
+        if (data.error) {
+            log('Submission failed: ' + data.error);
+        } else {
+            log('Signed on-chain — identity concealed', 'success');
+            document.getElementById('txDisplay').innerHTML =
+                'Verified on-chain: <a href="' + data.explorer + '" target="_blank">' +
+                data.transaction.slice(0, 20) + '...</a>';
+        }
+    } catch (e) {
+        log('Relay error: ' + e.message);
+    }
+
     document.getElementById('result').classList.add('show');
     document.getElementById('signBtn').disabled = false;
-    
-    log('Contract signed. Identity: concealed. Proof: on-chain.', 'success');
+    log('Done. Identity: concealed. Proof: on-chain.', 'success');
 }
