@@ -4,6 +4,7 @@ const { Noir } = require('@noir-lang/noir_js');
 const circuit = require('../../zk_intent_circuit/target/zk_intent_circuit.json');
 const tf = require('@tensorflow/tfjs');
 const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
+const RELAY_URL = 'http://localhost:3000';
 
 let biometricCaptured = false;
 let biometricFeatures = null;
