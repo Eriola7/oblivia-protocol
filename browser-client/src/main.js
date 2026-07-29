@@ -161,7 +161,7 @@ window.signContract = async function() {
     const noir = new Noir(circuit);
     const input = {
         contract_hash: contractHash,
-        signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
+        signer_key: BigInt('0x' + signingKey.slice(0, 62)).toString(),
         timestamp: Date.now().toString()
     };
     const { witness } = await noir.execute(input);

@@ -155,7 +155,7 @@ async function doSign() {
   const api = await Barretenberg.new({ threads: 1 });
   const backend = new UltraHonkBackend(circuit.bytecode, api);
   const noir = new Noir(circuit);
-  const input = { contract_hash: currentHash, signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(), timestamp: Date.now().toString() };
+  const input = { contract_hash: currentHash, signer_key: BigInt('0x' + signingKey.slice(0, 62)).toString(), timestamp: Date.now().toString() };
   const { witness } = await noir.execute(input);
   const proof = await backend.generateProof(witness);
   await backend.verifyProof(proof);

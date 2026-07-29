@@ -45,7 +45,7 @@ function deriveKey(biometricFeatures) {
  */
 async function generateProof(biometricFeatures, contractData) {
     const { key: signingKeyHex } = generate(biometricFeatures);
-    const signingKey = BigInt('0x' + signingKeyHex.slice(0, 32)).toString();
+    const signingKey = BigInt('0x' + signingKeyHex.slice(0, 62)).toString();
 
     const contractHash = Array.from(
         Buffer.from(contractData.padEnd(32, '\0').slice(0, 32))
