@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oblivia \u2014 Anonymous Multi-Signature</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a; color: #e0e0e0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .container { max-width: 480px; width: 100%; }
+    .logo { text-align: center; font-size: 28px; font-weight: 700; letter-spacing: 2px; margin-bottom: 4px; }
+    .tagline { text-align: center; color: #666; font-size: 13px; margin-bottom: 28px; font-style: italic; }
+    .card { background: #141414; border: 1px solid #222; border-radius: 14px; padding: 24px; }
+    h2 { font-size: 16px; margin-bottom: 16px; color: #fff; }
+    label { display: block; font-size: 12px; color: #888; margin-bottom: 6px; }
+    textarea, input, select {
+      width: 100%; background: #0a0a0a; border: 1px solid #2a2a2a; color: #e0e0e0;
+      border-radius: 8px; padding: 12px; font-size: 14px; margin-bottom: 16px; font-family: inherit;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+    button {
+      width: 100%; background: #00ff88; color: #000; border: none; border-radius: 8px;
+      padding: 14px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .2s;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    button.secondary { background: #222; color: #00ff88; border: 1px solid #00ff88; margin-top: 10px; }
+    .contract-box {
+      background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 14px;
+      font-size: 13px; color: #bbb; margin-bottom: 16px; white-space: pre-wrap; word-break: break-word;
+      max-height: 140px; overflow-y: auto;
+    }
+    .progress {
+      text-align: center; font-size: 18px; font-weight: 600; color: #00ff88;
+      margin: 16px 0; padding: 12px; background: #0a0a0a; border-radius: 8px;
+    }
+    .bio-status { text-align: center; font-size: 13px; color: #888; margin: 12px 0; min-height: 18px; }
+    .log {
+      margin-top: 18px; background: #0a0a0a; border-radius: 8px; padding: 12px;
+      font-family: 'SF Mono', Menlo, monospace; font-size: 11px; max-height: 160px; overflow-y: auto;
+    }
+    .log .step { color: #888; margin-bottom: 3px; }
+    .log .success { color: #00ff88; margin-bottom: 3px; }
+    .share-box { margin-top: 16px; }
+    .hint { font-size: 12px; color: #666; margin-bottom: 12px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">OBLIVIA</div>
+    <div class="tagline">Forget who I am. Remember what I signed.</div>
+
+    <div class="card" id="createMode" style="display:none;">
+      <h2>Create an anonymous co-signed agreement</h2>
+      <p class="hint">Create a multi-signature contract. Share the link with your co-signers. Everyone signs with their face \u2014 no one reveals their identity. It finalizes on-chain once the threshold is met.</p>
+      <label>Contract / Agreement text</label>
+      <textarea id="contractInput" placeholder="Enter the agreement all parties will sign..."></textarea>
+      <div class="row">
+        <div>
+          <label>Signatures required</label>
+          <input type="number" id="threshold" value="2" min="1" max="10">
+        </div>
+        <div>
+          <label>Total signers</label>
+          <input type="number" id="maxSigners" value="3" min="1" max="10">
+        </div>
+      </div>
+      <button id="createBtn" onclick="createMultisig()">Create Agreement</button>
+      <div class="share-box" id="shareBox" style="display:none;">
+        <label>Share this link with your co-signers</label>
+        <input type="text" id="shareLink" readonly>
+        <button class="secondary" onclick="copyLink()">Copy Link</button>
+      </div>
+    </div>
+
+    <div class="card" id="signMode" style="display:none;">
+      <h2>Co-sign this agreement</h2>
+      <label>Agreement</label>
+      <div class="contract-box" id="contractDisplay"></div>
+      <div class="progress" id="progress">Loading...</div>
+      <div class="bio-status" id="bioStatus"></div>
+      <button id="scanBtn" onclick="captureBiometric()">Scan Face &amp; Sign</button>
+      <div id="txLink" style="display:none; text-align:center; font-size:12px; margin-top:12px; font-family:monospace;"></div>
+    </div>
+
+    <div class="log" id="log"></div>
+  </div>
+  <script src="multisig.js"></script>
+</body>
+</html>
