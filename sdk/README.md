@@ -12,7 +12,7 @@ MIT licensed. No fees. No token. Free forever.
 ## Install
 
 ```bash
-npm install @oblivia/sdk
+npm install @eriola7/oblivia-sdk
 ```
 
 Until the package is published to npm, install directly from the repository:
@@ -25,7 +25,7 @@ cd oblivia-protocol/sdk && npm install
 ## Quick Start
 
 ```javascript
-const oblivia = require('@oblivia/sdk');
+const oblivia = require('@eriola7/oblivia-sdk');
 
 // 20 normalized biometric measurements (facial geometry ratios).
 // In production these come from the browser client's face capture.
