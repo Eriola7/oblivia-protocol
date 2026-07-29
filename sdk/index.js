@@ -17,6 +17,7 @@ const {
     submitSignature, 
     verifySignature,
     createMultisig,
+    submitMultisigSignature,
     finalizeMultisig,
     initializeRegistry
 } = require('./lib/anchor_integration');
@@ -127,7 +128,7 @@ async function signMultiSig(biometricFeatures, contractData) {
     const { proof, keyCommitment, signatureCommitment, contractHash } =
         await generateProof(biometricFeatures, contractData);
 
-    await submitSignature(contractHash, keyCommitment, signatureCommitment);
+    await submitMultisigSignature(contractHash, keyCommitment, signatureCommitment);
 
     return {
         keyCommitment,

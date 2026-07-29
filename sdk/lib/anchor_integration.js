@@ -6,6 +6,7 @@ const PROGRAM_ID = new PublicKey('HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG')
 const REGISTRY_SEED = Buffer.from('oblivia_registry');
 const CONTRACT_SEED = Buffer.from('oblivia_contract');
 const MULTISIG_SEED = Buffer.from("oblivia_multisig");
+const MULTISIG_MEMBER_SEED = Buffer.from("oblivia_multisig_member");
 const SIGNATURE_SEED = Buffer.from('oblivia_signature');
 
 const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
@@ -183,7 +184,7 @@ async function verifySignature(contractHash, keyCommitment, signatureCommitment)
     return tx;
 }
 
-module.exports = { initializeRegistry, registerContract, submitSignature, verifySignature, createMultisig, finalizeMultisig };
+module.exports = { initializeRegistry, registerContract, submitSignature, verifySignature, createMultisig, submitMultisigSignature, finalizeMultisig };
 
 async function createMultisig(contractHash, threshold, maxSigners) {
     const keypair = getKeypair();
@@ -214,6 +215,38 @@ async function createMultisig(contractHash, threshold, maxSigners) {
     console.log('MultiSig created. Transaction:', tx);
     console.log('Explorer: https://explorer.solana.com/tx/' + tx + '?cluster=devnet');
     return { multisigPda, tx };
+}
+
+async function submitMultisigSignature(contractHash, keyCommitment, signatureCommitment) {
+    const keypair = getKeypair();
+    const provider = getProvider(keypair);
+    const program = await getProgram(provider);
+
+    const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
+    const keyCommitmentBytes = Buffer.from(keyCommitment.replace(/^0x/, "").padEnd(64, "0"), "hex").slice(0, 32);
+    const sigCommitmentBytes = Buffer.from(signatureCommitment.replace(/^0x/, "").padEnd(64, "0"), "hex").slice(0, 32);
+
+    const [registryPda] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
+    const [contractPda] = PublicKey.findProgramAddressSync([CONTRACT_SEED, contractHashBytes], PROGRAM_ID);
+    const [signaturePda] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, keyCommitmentBytes, sigCommitmentBytes], PROGRAM_ID);
+    const [multisigPda] = PublicKey.findProgramAddressSync([MULTISIG_SEED, contractHashBytes], PROGRAM_ID);
+    const [memberPda] = PublicKey.findProgramAddressSync([MULTISIG_MEMBER_SEED, multisigPda.toBuffer(), keyCommitmentBytes], PROGRAM_ID);
+
+    const tx = await program.methods
+        .submitMultisigSignature(Array.from(keyCommitmentBytes), Array.from(sigCommitmentBytes))
+        .accounts({
+            registry: registryPda,
+            contract: contractPda,
+            signature: signaturePda,
+            multisig: multisigPda,
+            multisigMember: memberPda,
+            payer: keypair.publicKey,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .signers([keypair])
+        .rpc();
+
+    return { tx, multisigPda: multisigPda.toString() };
 }
 
 async function finalizeMultisig(contractHash) {
