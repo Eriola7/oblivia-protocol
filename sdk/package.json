@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Zero-identity contract signing for Solana. Sign legally binding agreements with full cryptographic provability and zero identity disclosure.",
   "main": "index.js",
+  "scripts": {
+    "test:proof": "node -e \"require('./lib/groth16_intent').generateIntentProof(12345678n,'Oblivia SDK proof test','1000000000').then(p=>{if(p.publicInputs.length!==128)throw new Error('invalid public input length');console.log('PASS: SDK Groth16 proof')})\""
+  },
   "types": "index.d.ts",
   "license": "MIT",
   "repository": {
@@ -21,11 +24,11 @@
     "anchor"
   ],
   "dependencies": {
-    "@aztec/bb.js": "^4.2.0",
     "@coral-xyz/anchor": "^0.32.1",
-    "@noir-lang/noir_js": "^1.0.0-beta.20",
+    "@noble/hashes": "^1.8.0",
     "@solana/web3.js": "^1.98.4",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "snarkjs": "^0.7.6"
   },
   "engines": {
     "node": ">=18"

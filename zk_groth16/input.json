@@ -1,5 +1,6 @@
 {
     "signer_key": "12345678",
-    "contract_hash": "987654321",
+    "contract_hash_lo": "1",
+    "contract_hash_hi": "2",
     "timestamp": "1000000000"
 }

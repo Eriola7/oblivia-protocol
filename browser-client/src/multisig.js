@@ -1,11 +1,15 @@
 const { sha256 } = require('@noble/hashes/sha2.js');
-const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
-const { Noir } = require('@noir-lang/noir_js');
-const circuit = require('../../zk_intent_circuit/target/zk_intent_circuit.json');
+const snarkjs = require('snarkjs');
 const tf = require('@tensorflow/tfjs');
 const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
 
 const RELAY_URL = 'https://oblivia-relay.onrender.com';
+const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
+
+function fieldBytes(value) { let n = BigInt(value); const out = new Uint8Array(32); for (let i = 31; i >= 0; i--) { out[i] = Number(n & 255n); n >>= 8n; } return out; }
+function grothPayload(proof, signals) {
+  return { proofA: Array.from([...fieldBytes(proof.pi_a[0]), ...fieldBytes(FIELD_MODULUS - BigInt(proof.pi_a[1]))]), proofB: Array.from([...fieldBytes(proof.pi_b[0][1]), ...fieldBytes(proof.pi_b[0][0]), ...fieldBytes(proof.pi_b[1][1]), ...fieldBytes(proof.pi_b[1][0])]), proofC: Array.from([...fieldBytes(proof.pi_c[0]), ...fieldBytes(proof.pi_c[1])]), publicInputs: Array.from(signals.flatMap(fieldBytes)), keyCommitment: Array.from(fieldBytes(signals[0])), signatureCommitment: Array.from(fieldBytes(signals[1])) };
+}
 
 let biometricCaptured = false;
 let biometricFeatures = null;
@@ -152,22 +156,18 @@ async function doSign() {
   log('Deriving key...');
   const signingKey = deriveKey(biometricFeatures);
   log('Generating ZK proof... (takes a moment)');
-  const api = await Barretenberg.new({ threads: 1 });
-  const backend = new UltraHonkBackend(circuit.bytecode, api);
-  const noir = new Noir(circuit);
-  const input = { contract_hash: currentHash, signer_key: BigInt('0x' + signingKey.slice(0, 62)).toString(), timestamp: Date.now().toString() };
-  const { witness } = await noir.execute(input);
-  const proof = await backend.generateProof(witness);
-  await backend.verifyProof(proof);
-  await api.destroy();
+  const hex = currentHash.map(b => b.toString(16).padStart(2, '0')).join('');
+  const input = { contract_hash_lo: BigInt('0x' + hex.slice(0, 32)).toString(), contract_hash_hi: BigInt('0x' + hex.slice(32)).toString(), signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(), timestamp: Date.now().toString() };
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
+  const payload = grothPayload(proof, publicSignals);
   log('Proof generated', 'success');
-  const keyCommitment = '0x' + BigInt(proof.publicInputs[0]).toString(16).padStart(64, '0');
-  const signatureCommitment = '0x' + BigInt(proof.publicInputs[1]).toString(16).padStart(64, '0');
+  const keyCommitment = '0x' + Buffer.from(payload.keyCommitment).toString('hex');
+  const signatureCommitment = '0x' + Buffer.from(payload.signatureCommitment).toString('hex');
   log('Submitting to Solana... (sponsored)');
   try {
     const res = await fetch(RELAY_URL + '/multisig/sign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contractHash: currentHash, keyCommitment, signatureCommitment })
+      body: JSON.stringify({ contractHash: currentHash, keyCommitment, signatureCommitment, proofA: payload.proofA, proofB: payload.proofB, proofC: payload.proofC, publicInputs: payload.publicInputs })
     });
     const data = await res.json();
     if (data.error) { log('Failed: ' + data.error); document.getElementById('scanBtn').disabled = false; return; }

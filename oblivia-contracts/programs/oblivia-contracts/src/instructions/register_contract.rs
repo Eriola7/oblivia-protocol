@@ -1,10 +1,16 @@
-use anchor_lang::prelude::*;
-use crate::state::{ContractRegistry, Contract};
-use crate::constants::{REGISTRY_SEED, CONTRACT_SEED};
+use crate::constants::{CONTRACT_SEED, REGISTRY_SEED};
 use crate::error::ObliviaError;
+use crate::state::{Contract, ContractRegistry};
+use anchor_lang::prelude::*;
 
-pub fn register_contract_handler(ctx: Context<RegisterContract>, contract_hash: [u8; 32]) -> Result<()> {
-    require!(contract_hash != [0u8; 32], ObliviaError::InvalidContractHash);
+pub fn register_contract_handler(
+    ctx: Context<RegisterContract>,
+    contract_hash: [u8; 32],
+) -> Result<()> {
+    require!(
+        contract_hash != [0u8; 32],
+        ObliviaError::InvalidContractHash
+    );
 
     let registry = &mut ctx.accounts.registry;
     let contract = &mut ctx.accounts.contract;

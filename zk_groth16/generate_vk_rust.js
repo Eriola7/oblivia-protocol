@@ -46,3 +46,5 @@ for (let i = 0; i < vk.IC.length; i++) {
     console.log(`const IC${i}_X: [u8; 32] = ${toBigEndian32(vk.IC[i][0])};`);
     console.log(`const IC${i}_Y: [u8; 32] = ${toBigEndian32(vk.IC[i][1])};`);
 }
+
+console.log(`\n// This circuit has ${vk.nPublic} public signals. The Anchor verifier must use the same count.`);

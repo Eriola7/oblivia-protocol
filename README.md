@@ -1,5 +1,11 @@
 # Oblivia Protocol
 
+> **Security status:** signing and multisig submission are intentionally disabled in the hardened program until the contract-bound Groth16 verifying key is integrated and a replacement program is deployed. This repository is not ready for production use.
+
+## Current proof migration
+
+`zk_groth16/oblivia.circom` now exposes the two 128-bit limbs of the canonical SHA-256 contract hash as public inputs. A proof therefore binds its key and signature commitments to the complete contract hash. The regenerated development verification key has four public signals; it must be integrated into a newly deployed Anchor program before signing is re-enabled. The current devnet program and the retired on-chain demo target the previous two-signal circuit and must not be used for new attestations.
+
 > Forget who I am. Remember what I signed.
 
 Zero-identity contract signing protocol for Solana. Sign legally binding agreements with full cryptographic provability and zero identity disclosure.

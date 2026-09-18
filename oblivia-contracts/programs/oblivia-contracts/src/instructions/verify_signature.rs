@@ -1,12 +1,15 @@
-use anchor_lang::prelude::*;
-use crate::state::{Contract, ObliviaSignature};
 use crate::constants::{CONTRACT_SEED, SIGNATURE_SEED};
+use crate::state::{Contract, ObliviaSignature};
+use anchor_lang::prelude::*;
 
 pub fn verify_signature_handler(ctx: Context<VerifySignature>) -> Result<()> {
     let contract = &ctx.accounts.contract;
     let signature = &ctx.accounts.signature;
 
-    require!(contract.active, crate::error::ObliviaError::ContractInactive);
+    require!(
+        contract.active,
+        crate::error::ObliviaError::ContractInactive
+    );
     require!(
         signature.contract == contract.key(),
         crate::error::ObliviaError::InvalidSignatureCommitment
@@ -30,7 +33,7 @@ pub struct VerifySignature<'info> {
     )]
     pub contract: Account<'info, Contract>,
     #[account(
-        seeds = [SIGNATURE_SEED, &signature.key_commitment, &signature.signature_commitment],
+        seeds = [SIGNATURE_SEED, contract.key().as_ref(), &signature.key_commitment, &signature.signature_commitment],
         bump = signature.bump,
         constraint = signature.contract == contract.key()
     )]

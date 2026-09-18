@@ -21,12 +21,16 @@ export interface SignResult {
 
 /** Result of ZK proof generation. */
 export interface ProofResult {
-  /** Raw proof bytes. */
-  proof: Uint8Array;
-  /** Public inputs: [keyCommitment, signatureCommitment]. */
-  publicInputs: string[];
-  /** True if the proof verified locally. */
-  verified: boolean;
+  /** Canonical SHA-256 contract hash. */
+  contractHash: number[];
+  /** Groth16 proof encoded for the Anchor verifier. */
+  proofA: number[];
+  proofB: number[];
+  proofC: number[];
+  /** Public inputs: key, signature, contract-hash low limb, high limb. */
+  publicInputs: number[];
+  keyCommitment: number[];
+  signatureCommitment: number[];
 }
 
 /** Multi-signature contract state. */

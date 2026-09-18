@@ -1,39 +1,19 @@
-use anchor_lang::prelude::*;
-use crate::state::{ContractRegistry, Contract, ObliviaSignature, SignerRecord};
-use crate::constants::{REGISTRY_SEED, CONTRACT_SEED, SIGNATURE_SEED, SIGNER_RECORD_SEED};
+use crate::constants::{CONTRACT_SEED, REGISTRY_SEED, SIGNATURE_SEED, SIGNER_RECORD_SEED};
 use crate::error::ObliviaError;
+use crate::state::{Contract, ContractRegistry, ObliviaSignature, SignerRecord};
+use anchor_lang::prelude::*;
 
 pub fn submit_signature_handler(
-    ctx: Context<SubmitSignature>,
-    key_commitment: [u8; 32],
-    signature_commitment: [u8; 32],
+    _ctx: Context<SubmitSignature>,
+    _key_commitment: [u8; 32],
+    _signature_commitment: [u8; 32],
 ) -> Result<()> {
-    require!(ctx.accounts.contract.active, ObliviaError::ContractInactive);
-    require!(key_commitment != [0u8; 32], ObliviaError::InvalidKeyCommitment);
-    require!(signature_commitment != [0u8; 32], ObliviaError::InvalidSignatureCommitment);
-
-    // Record signer — PDA init fails if same key signs same contract twice
-    let signer_record = &mut ctx.accounts.signer_record;
-    signer_record.contract = ctx.accounts.contract.key();
-    signer_record.key_commitment = key_commitment;
-    signer_record.timestamp = Clock::get()?.unix_timestamp;
-    signer_record.bump = ctx.bumps.signer_record;
-
-    let contract = &mut ctx.accounts.contract;
-    let signature = &mut ctx.accounts.signature;
-    let registry = &mut ctx.accounts.registry;
-
-    signature.key_commitment = key_commitment;
-    signature.signature_commitment = signature_commitment;
-    signature.contract = contract.key();
-    signature.timestamp = Clock::get()?.unix_timestamp;
-    signature.bump = ctx.bumps.signature;
-
-    contract.signature_count += 1;
-    registry.total_signatures += 1;
-
-    msg!("Signature submitted. Key commitment: {:?}", &key_commitment[..8]);
-    Ok(())
+    // FAIL CLOSED: the previous implementation stored arbitrary caller-provided
+    // commitments. The current Groth16 verifier has no public contract-hash input,
+    // so it cannot prove that a commitment authorizes this contract. Do not enable
+    // signing until the regenerated circuit and verifying key are wired into one
+    // atomic, contract-bound submission instruction.
+    err!(ObliviaError::ProofBindingUnavailable)
 }
 
 #[derive(Accounts)]
@@ -45,7 +25,9 @@ pub struct SubmitSignature<'info> {
     pub contract: Account<'info, Contract>,
     #[account(
         init, payer = payer, space = ObliviaSignature::LEN,
-        seeds = [SIGNATURE_SEED, &key_commitment, &signature_commitment], bump
+        // A signature belongs to one contract. Including the contract PDA prevents a
+        // valid record on one contract from blocking the same signer elsewhere.
+        seeds = [SIGNATURE_SEED, contract.key().as_ref(), &key_commitment, &signature_commitment], bump
     )]
     pub signature: Account<'info, ObliviaSignature>,
     /// Deduplication PDA — init fails if same key signs same contract twice

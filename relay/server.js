@@ -1,12 +1,56 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') }); require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const relayOrigins = (process.env.OBLIVIA_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
+app.use(cors({ origin: relayOrigins.length ? relayOrigins : false }));
+app.use(express.json({ limit: '16kb' }));
+app.use('/proving-assets', express.static(path.join(__dirname, '../zk_groth16')));
+
+// A sponsored relay must never be an unauthenticated transaction oracle.
+function requireRelayKey(req, res, next) {
+    const configuredKey = process.env.OBLIVIA_RELAY_API_KEY;
+    if (!configuredKey || req.get('authorization') !== `Bearer ${configuredKey}`) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+}
+
+const relayWindows = new Map();
+function limitSponsoredRequest(req, res, next) {
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const state = relayWindows.get(key) || { start: now, count: 0 };
+    if (now - state.start > 60 * 60 * 1000) { state.start = now; state.count = 0; }
+    if (++state.count > 10) return res.status(429).json({ error: 'Sponsored signing limit reached; try again later.' });
+    relayWindows.set(key, state);
+    next();
+}
+
+function parseHex32(value, name) {
+    if (typeof value !== 'string' || !/^(?:0x)?[0-9a-fA-F]{64}$/.test(value)) {
+        throw new Error(`${name} must be exactly 32 bytes of hexadecimal`);
+    }
+    return Buffer.from(value.replace(/^0x/, ''), 'hex');
+}
+
+function parseBytes32(value, name) {
+    if (!Array.isArray(value) || value.length !== 32 || value.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255)) {
+        throw new Error(`${name} must be an array of exactly 32 bytes`);
+    }
+    return Buffer.from(value);
+}
+
+function parseByteArray(value, length, name) {
+    if (!Array.isArray(value) || value.length !== length || value.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255)) {
+        throw new Error(`${name} must be an array of exactly ${length} bytes`);
+    }
+    return value;
+}
 
 const PROGRAM_ID = new PublicKey('HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG');
 const REGISTRY_SEED = Buffer.from('oblivia_registry');
@@ -33,20 +77,20 @@ function getProgram() {
 
 app.get('/', (req, res) => res.json({ status: 'Oblivia relay live' }));
 
-app.post('/sign', async (req, res) => {
+app.post('/sign', limitSponsoredRequest, async (req, res) => {
     try {
-        const { contractHash, keyCommitment, signatureCommitment } = req.body;
+        const { contractHash, keyCommitment, signatureCommitment, proofA, proofB, proofC, publicInputs } = req.body;
 
-        const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
-        const keyCommitmentBytes = Buffer.from(keyCommitment.replace('0x', '').padEnd(64, '0'), 'hex').slice(0, 32);
-        const sigCommitmentBytes = Buffer.from(signatureCommitment.replace('0x', '').padEnd(64, '0'), 'hex').slice(0, 32);
+        const contractHashBytes = parseBytes32(contractHash, 'contractHash');
+        const keyCommitmentBytes = parseHex32(keyCommitment, 'keyCommitment');
+        const sigCommitmentBytes = parseHex32(signatureCommitment, 'signatureCommitment');
 
         const { program, keypair } = getProgram();
 
         const [registryPda] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
         const [contractPda] = PublicKey.findProgramAddressSync([CONTRACT_SEED, contractHashBytes], PROGRAM_ID);
         const [signaturePda] = PublicKey.findProgramAddressSync(
-            [SIGNATURE_SEED, keyCommitmentBytes, sigCommitmentBytes], PROGRAM_ID);
+            [SIGNATURE_SEED, contractPda.toBuffer(), keyCommitmentBytes, sigCommitmentBytes], PROGRAM_ID);
         const [signerRecordPda] = PublicKey.findProgramAddressSync(
             [Buffer.from('oblivia_signer_record'), contractHashBytes, keyCommitmentBytes], PROGRAM_ID);
 
@@ -65,9 +109,16 @@ app.post('/sign', async (req, res) => {
                 .rpc();
         }
 
-        // Submit the signature
+        // Verify and record the signature atomically. The program checks that the
+        // proof's public contract limbs and commitments match these arguments.
         const tx = await program.methods
-            .submitSignature(Array.from(keyCommitmentBytes), Array.from(sigCommitmentBytes))
+            .verifyGroth16V2(
+                parseByteArray(proofA, 64, 'proofA'),
+                parseByteArray(proofB, 128, 'proofB'),
+                parseByteArray(proofC, 64, 'proofC'),
+                parseByteArray(publicInputs, 128, 'publicInputs'),
+                Array.from(keyCommitmentBytes), Array.from(sigCommitmentBytes),
+            )
             .accounts({
                 registry: registryPda,
                 contract: contractPda,
@@ -91,10 +142,10 @@ app.post('/sign', async (req, res) => {
 
 // ---- MULTISIG ----
 
-app.post('/multisig/create', async (req, res) => {
+app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
     try {
         const { contractHash, threshold, maxSigners } = req.body;
-        const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
+        const contractHashBytes = parseBytes32(contractHash, 'contractHash');
         const { program, keypair } = getProgram();
 
         const [registryPda] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
@@ -121,23 +172,27 @@ app.post('/multisig/create', async (req, res) => {
     } catch (e) { res.json({ error: e.message }); }
 });
 
-app.post('/multisig/sign', async (req, res) => {
+app.post('/multisig/sign', limitSponsoredRequest, async (req, res) => {
     try {
-        const { contractHash, keyCommitment, signatureCommitment } = req.body;
-        const contractHashBytes = Buffer.from(contractHash).slice(0, 32);
-        const keyCommitmentBytes = Buffer.from(keyCommitment.replace(/^0x/, '').padEnd(64, '0'), 'hex').slice(0, 32);
-        const sigCommitmentBytes = Buffer.from(signatureCommitment.replace(/^0x/, '').padEnd(64, '0'), 'hex').slice(0, 32);
+        const { contractHash, keyCommitment, signatureCommitment, proofA, proofB, proofC, publicInputs } = req.body;
+        const contractHashBytes = parseBytes32(contractHash, 'contractHash');
+        const keyCommitmentBytes = parseHex32(keyCommitment, 'keyCommitment');
+        const sigCommitmentBytes = parseHex32(signatureCommitment, 'signatureCommitment');
         const { program, keypair } = getProgram();
 
         const [registryPda] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
         const [contractPda] = PublicKey.findProgramAddressSync([CONTRACT_SEED, contractHashBytes], PROGRAM_ID);
-        const [signaturePda] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, keyCommitmentBytes, sigCommitmentBytes], PROGRAM_ID);
+        const [signaturePda] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, contractPda.toBuffer(), keyCommitmentBytes, sigCommitmentBytes], PROGRAM_ID);
         const [multisigPda] = PublicKey.findProgramAddressSync([MULTISIG_SEED, contractHashBytes], PROGRAM_ID);
         const [memberPda] = PublicKey.findProgramAddressSync([MULTISIG_MEMBER_SEED, multisigPda.toBuffer(), keyCommitmentBytes], PROGRAM_ID);
 
-        const tx = await program.methods.submitMultisigSignature(Array.from(keyCommitmentBytes), Array.from(sigCommitmentBytes))
-            .accounts({ registry: registryPda, contract: contractPda, signature: signaturePda, multisig: multisigPda, multisigMember: memberPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
-            .signers([keypair]).rpc();
+        const verify = await program.methods.verifyGroth16V2(
+            parseByteArray(proofA, 64, 'proofA'), parseByteArray(proofB, 128, 'proofB'), parseByteArray(proofC, 64, 'proofC'), parseByteArray(publicInputs, 128, 'publicInputs'),
+            Array.from(keyCommitmentBytes), Array.from(sigCommitmentBytes)
+        ).accounts({ registry: registryPda, contract: contractPda, signature: signaturePda, signerRecord: PublicKey.findProgramAddressSync([Buffer.from('oblivia_signer_record'), contractHashBytes, keyCommitmentBytes], PROGRAM_ID)[0], payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+        const record = await program.methods.recordVerifiedMultisig(Array.from(contractHashBytes), Array.from(keyCommitmentBytes))
+            .accounts({ registry: registryPda, contract: contractPda, multisig: multisigPda, multisigMember: memberPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+        const tx = await program.provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
 
         const ms = await program.account.multiSigContract.fetch(multisigPda);
         res.json({ transaction: tx, collected: ms.signaturesCollected, threshold: ms.threshold, finalized: ms.finalized, explorer: 'https://explorer.solana.com/tx/' + tx + '?cluster=devnet' });

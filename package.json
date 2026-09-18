@@ -4,7 +4,9 @@
   "description": "Zero-identity contract signing protocol for Solana",
   "main": "integration.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm --prefix zk_groth16 run test:binding",
+    "test:program": "cd oblivia-contracts && cargo check -p oblivia-contracts",
+    "build:browser": "npm --prefix browser-client run build"
   },
   "repository": {
     "type": "git",

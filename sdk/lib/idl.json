@@ -261,6 +261,189 @@
       "args": []
     },
     {
+      "name": "record_verified_multisig",
+      "discriminator": [
+        25,
+        151,
+        82,
+        212,
+        164,
+        238,
+        216,
+        168
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "contract",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  97,
+                  99,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "contract_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "contract_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "multisig_member",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  109,
+                  117,
+                  108,
+                  116,
+                  105,
+                  115,
+                  105,
+                  103,
+                  95,
+                  109,
+                  101,
+                  109,
+                  98,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "multisig"
+              },
+              {
+                "kind": "arg",
+                "path": "key_commitment"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "contract_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "key_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "register_contract",
       "discriminator": [
         215,
@@ -431,6 +614,10 @@
                 ]
               },
               {
+                "kind": "account",
+                "path": "contract"
+              },
+              {
                 "kind": "arg",
                 "path": "key_commitment"
               },
@@ -597,6 +784,10 @@
                 ]
               },
               {
+                "kind": "account",
+                "path": "contract"
+              },
+              {
                 "kind": "arg",
                 "path": "key_commitment"
               },
@@ -727,6 +918,165 @@
             "array": [
               "u8",
               64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "verify_groth16_v2",
+      "discriminator": [
+        105,
+        92,
+        155,
+        149,
+        157,
+        105,
+        169,
+        232
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "contract",
+          "writable": true
+        },
+        {
+          "name": "signature",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  115,
+                  105,
+                  103,
+                  110,
+                  97,
+                  116,
+                  117,
+                  114,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "contract"
+              },
+              {
+                "kind": "arg",
+                "path": "key_commitment"
+              },
+              {
+                "kind": "arg",
+                "path": "signature_commitment"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer_record",
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "proof_a",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "proof_b",
+          "type": {
+            "array": [
+              "u8",
+              128
+            ]
+          }
+        },
+        {
+          "name": "proof_c",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "pub_inputs",
+          "type": {
+            "array": [
+              "u8",
+              128
+            ]
+          }
+        },
+        {
+          "name": "key_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "signature_commitment",
+          "type": {
+            "array": [
+              "u8",
+              32
             ]
           }
         }
@@ -870,6 +1220,11 @@
       "code": 6006,
       "name": "InvalidProof",
       "msg": "Invalid Groth16 proof"
+    },
+    {
+      "code": 6007,
+      "name": "ProofBindingUnavailable",
+      "msg": "Signature submission is disabled until a contract-bound proof verifier is configured"
     }
   ],
   "types": [

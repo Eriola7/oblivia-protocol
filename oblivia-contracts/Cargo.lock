@@ -1901,6 +1901,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "groth16-solana",
  "litesvm",
+ "serde_json",
  "solana-bn254 2.2.2",
  "solana-keypair",
  "solana-message 3.1.0",

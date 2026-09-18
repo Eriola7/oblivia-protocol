@@ -29,6 +29,9 @@ ark-ec = "0.5"
 ark-ff = "0.5"
 solana-program = "2.3.0"
 
+[build-dependencies]
+serde_json = "1"
+
 [dev-dependencies]
 litesvm = "0.10.0"
 solana-message = "3.0.1"

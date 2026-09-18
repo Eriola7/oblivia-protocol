@@ -9,20 +9,22 @@
  *   const result = await oblivia.signContract(biometricFeatures, contractData);
  */
 
-const { Noir } = require('@noir-lang/noir_js');
-const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
 const { generate, reproduce } = require('./lib/fuzzyExtractor');
+const { generateIntentProof } = require('./lib/groth16_intent');
 const { 
     registerContract, 
-    submitSignature, 
-    verifySignature,
     createMultisig,
-    submitMultisigSignature,
     finalizeMultisig,
     initializeRegistry
 } = require('./lib/anchor_integration');
+const { submitVerifiedGroth16, submitVerifiedMultiSig } = require('./lib/anchor_integration');
 
-const circuit = require('./lib/circuit.json');
+const { createHash } = require('crypto');
+
+function hashContract(contractData) {
+    if (typeof contractData !== 'string') throw new TypeError('contractData must be a string');
+    return Array.from(createHash('sha256').update(contractData, 'utf8').digest());
+}
 
 /**
  * Derive a signing key from biometric features
@@ -45,35 +47,7 @@ function deriveKey(biometricFeatures) {
  */
 async function generateProof(biometricFeatures, contractData) {
     const { key: signingKeyHex } = generate(biometricFeatures);
-    const signingKey = BigInt('0x' + signingKeyHex.slice(0, 62)).toString();
-
-    const contractHash = Array.from(
-        Buffer.from(contractData.padEnd(32, '\0').slice(0, 32))
-    );
-
-    const api = await Barretenberg.new({ threads: 1 });
-    const backend = new UltraHonkBackend(circuit.bytecode, api);
-    const noir = new Noir(circuit);
-
-    const input = {
-        contract_hash: contractHash,
-        signer_key: signingKey,
-        timestamp: Date.now().toString()
-    };
-
-    const { witness } = await noir.execute(input);
-    const proof = await backend.generateProof(witness);
-    const verified = await backend.verifyProof(proof);
-    await api.destroy();
-
-    if (!verified) throw new Error('Proof verification failed');
-
-    return {
-        proof,
-        keyCommitment: proof.publicInputs[0],
-        signatureCommitment: proof.publicInputs[1],
-        contractHash
-    };
+    return generateIntentProof(BigInt('0x' + signingKeyHex.slice(0, 32)), contractData);
 }
 
 /**
@@ -89,8 +63,7 @@ async function signContract(biometricFeatures, contractData) {
         await generateProof(biometricFeatures, contractData);
 
     await registerContract(contractHash);
-    await submitSignature(contractHash, keyCommitment, signatureCommitment);
-    await verifySignature(contractHash, keyCommitment, signatureCommitment);
+    await submitVerifiedGroth16(contractHash, proof);
 
     return {
         verified: true,
@@ -110,9 +83,7 @@ async function signContract(biometricFeatures, contractData) {
  * @param {number} maxSigners - Maximum signers allowed
  */
 async function createMultiSigContract(contractData, threshold, maxSigners) {
-    const contractHash = Array.from(
-        Buffer.from(contractData.padEnd(32, '\0').slice(0, 32))
-    );
+    const contractHash = hashContract(contractData);
     await registerContract(contractHash);
     await createMultisig(contractHash, threshold, maxSigners);
     return { contractHash, threshold, maxSigners };
@@ -128,7 +99,7 @@ async function signMultiSig(biometricFeatures, contractData) {
     const { proof, keyCommitment, signatureCommitment, contractHash } =
         await generateProof(biometricFeatures, contractData);
 
-    await submitMultisigSignature(contractHash, keyCommitment, signatureCommitment);
+    await submitVerifiedMultiSig(contractHash, proof);
 
     return {
         keyCommitment,
@@ -143,9 +114,7 @@ async function signMultiSig(biometricFeatures, contractData) {
  * @param {string} contractData - The contract content
  */
 async function finalizeMultiSigContract(contractData) {
-    const contractHash = Array.from(
-        Buffer.from(contractData.padEnd(32, '\0').slice(0, 32))
-    );
+    const contractHash = hashContract(contractData);
     await finalizeMultisig(contractHash);
     return { finalized: true, identityRevealed: false };
 }

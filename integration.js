@@ -1,8 +1,6 @@
-const { Noir } = require('@noir-lang/noir_js');
-const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
 const { generate } = require('./biometric-entropy-client/fuzzyExtractor');
-const circuit = require('./zk_intent_circuit/target/zk_intent_circuit.json');
-const { registerContract, submitSignature, verifySignature } = require('./anchor_integration');
+const { generateIntentProof } = require('./groth16_intent');
+const { registerContract, submitVerifiedGroth16 } = require('./anchor_integration');
 
 /**
  * Oblivia - Full Integration
@@ -19,44 +17,12 @@ async function signContract(biometricFeatures, contractData) {
     const signingKey = BigInt('0x' + signingKeyHex.slice(0, 32)).toString();
     console.log("Signing key derived. (never transmitted, never stored)");
 
-    // Step 2: Hash the contract
-    console.log("\nStep 2: Hashing contract...");
-    const crypto = require('crypto');
-    const contractHash = Array.from(
-        crypto.createHash('sha256').update(contractData).digest()
-    );
-    console.log("Contract hash:", contractHash.slice(0, 8), "...");
-
-    // Step 3: Generate ZK proof
+    // Step 2: Generate a contract-bound Groth16 proof.
     console.log("\nStep 3: Generating ZK proof...");
-    const api = await Barretenberg.new({ threads: 1 });
-    const backend = new UltraHonkBackend(circuit.bytecode, api);
-    const noir = new Noir(circuit);
-
-    const input = {
-        contract_hash: contractHash,
-        signer_key: signingKey,
-        timestamp: Date.now().toString()
-    };
-
-    const { witness } = await noir.execute(input);
-    const proof = await backend.generateProof(witness);
-
-    // Step 4: Verify proof locally
-    console.log("\nStep 4: Verifying proof locally...");
-    const verified = await backend.verifyProof(proof);
-    await api.destroy();
-
-    if (!verified) {
-        throw new Error("Local proof verification failed");
-    }
-
-    console.log("Proof verified locally.");
-
-    // Extract public outputs (key_commitment and signature_commitment)
-    const publicInputs = proof.publicInputs;
-    const keyCommitment = publicInputs[0];
-    const signatureCommitment = publicInputs[1];
+    const proof = await generateIntentProof(signingKey, contractData);
+    const contractHash = Array.from(proof.contractHash);
+    const keyCommitment = Buffer.from(proof.keyCommitment).toString('hex');
+    const signatureCommitment = Buffer.from(proof.signatureCommitment).toString('hex');
 
     console.log("\nKey commitment:", keyCommitment.slice(0, 16), "...");
     console.log("Signature commitment:", signatureCommitment.slice(0, 16), "...");
@@ -65,20 +31,16 @@ async function signContract(biometricFeatures, contractData) {
     console.log("\nStep 5: Registering contract on Solana...");
     await registerContract(contractHash);
 
-    // Step 6: Submit ZK commitments to Anchor program
-    console.log("\nStep 6: Submitting ZK commitments to Anchor program...");
-    await submitSignature(contractHash, keyCommitment, signatureCommitment);
-
-    // Step 7: Verify on-chain
-    console.log("\nStep 7: Verifying signature on-chain...");
-    await verifySignature(contractHash, keyCommitment, signatureCommitment);
+    // Step 6: Atomically verify the proof and record the signature on-chain.
+    console.log("\nStep 6: Submitting verified proof to Anchor...");
+    await submitVerifiedGroth16(contractHash, proof);
 
     console.log("\n=== Result ===");
     console.log("Contract signed:", true);
     console.log("Identity revealed: false");
     console.log("Data transmitted: false");
     console.log("On-chain verified: true");
-    console.log("Proof size:", proof.proof.length, "fields");
+    console.log("Proof size:", proof.proofA.length + proof.proofB.length + proof.proofC.length, "bytes");
 
     return { verified: true, proof, keyCommitment, signatureCommitment };
 }

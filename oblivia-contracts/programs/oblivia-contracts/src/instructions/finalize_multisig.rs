@@ -1,18 +1,17 @@
-use anchor_lang::prelude::*;
-use crate::state::{Contract, MultiSigContract};
 use crate::constants::{CONTRACT_SEED, MULTISIG_SEED};
 use crate::error::ObliviaError;
+use crate::state::{Contract, MultiSigContract};
+use anchor_lang::prelude::*;
 
 pub fn finalize_multisig_handler(
     ctx: Context<FinalizeMultiSig>,
     _contract_hash: [u8; 32],
 ) -> Result<()> {
     let multisig = &mut ctx.accounts.multisig;
-    let contract = &ctx.accounts.contract;
 
     require!(!multisig.finalized, ObliviaError::ContractInactive);
     require!(
-        contract.signature_count >= multisig.threshold as u64,
+        multisig.signatures_collected >= multisig.threshold,
         ObliviaError::InvalidSignatureCommitment
     );
 
@@ -21,7 +20,7 @@ pub fn finalize_multisig_handler(
 
     msg!(
         "MultiSig finalized. {}/{} signatures collected.",
-        contract.signature_count,
+        multisig.signatures_collected,
         multisig.threshold
     );
     msg!("Identity revealed: false");

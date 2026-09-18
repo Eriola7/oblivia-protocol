@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::ContractRegistry;
 use crate::constants::REGISTRY_SEED;
+use crate::state::ContractRegistry;
+use anchor_lang::prelude::*;
 
 pub fn initialize_handler(ctx: Context<Initialize>) -> Result<()> {
     let registry = &mut ctx.accounts.registry;

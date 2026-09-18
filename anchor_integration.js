@@ -112,7 +112,7 @@ async function submitSignature(contractHash, keyCommitment, signatureCommitment)
     );
 
     const [signaturePda] = PublicKey.findProgramAddressSync(
-        [SIGNATURE_SEED, keyCommitmentBytes, sigCommitmentBytes],
+        [SIGNATURE_SEED, contractPda.toBuffer(), keyCommitmentBytes, sigCommitmentBytes],
         PROGRAM_ID
     );
 
@@ -165,7 +165,7 @@ async function verifySignature(contractHash, keyCommitment, signatureCommitment)
     );
 
     const [signaturePda] = PublicKey.findProgramAddressSync(
-        [SIGNATURE_SEED, keyCommitmentBytes, sigCommitmentBytes],
+        [SIGNATURE_SEED, contractPda.toBuffer(), keyCommitmentBytes, sigCommitmentBytes],
         PROGRAM_ID
     );
 
@@ -184,6 +184,53 @@ async function verifySignature(contractHash, keyCommitment, signatureCommitment)
 }
 
 module.exports = { initializeRegistry, registerContract, submitSignature, verifySignature, createMultisig, finalizeMultisig };
+
+/** Submit a contract-bound Groth16 proof through the atomic v2 instruction. */
+async function submitVerifiedGroth16(contractHash, anchorProof) {
+    const keypair = getKeypair();
+    const provider = getProvider(keypair);
+    const program = await getProgram(provider);
+    const contractHashBytes = Buffer.from(contractHash);
+    if (contractHashBytes.length !== 32) throw new Error('contractHash must be 32 bytes');
+    const keyCommitment = Buffer.from(anchorProof.keyCommitment);
+    const signatureCommitment = Buffer.from(anchorProof.signatureCommitment);
+    const [registry] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
+    const [contract] = PublicKey.findProgramAddressSync([CONTRACT_SEED, contractHashBytes], PROGRAM_ID);
+    const [signature] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, contract.toBuffer(), keyCommitment, signatureCommitment], PROGRAM_ID);
+    const [signerRecord] = PublicKey.findProgramAddressSync([Buffer.from('oblivia_signer_record'), contractHashBytes, keyCommitment], PROGRAM_ID);
+    return program.methods.verifyGroth16V2(
+        anchorProof.proofA, anchorProof.proofB, anchorProof.proofC, anchorProof.publicInputs,
+        Array.from(keyCommitment), Array.from(signatureCommitment),
+    ).accounts({ registry, contract, signature, signerRecord, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
+      .signers([keypair]).rpc();
+}
+
+module.exports.submitVerifiedGroth16 = submitVerifiedGroth16;
+
+async function submitVerifiedMultiSig(contractHash, anchorProof) {
+    const keypair = getKeypair();
+    const provider = getProvider(keypair);
+    const program = await getProgram(provider);
+    const hash = Buffer.from(contractHash);
+    if (hash.length !== 32) throw new Error('contractHash must be 32 bytes');
+    const key = Buffer.from(anchorProof.keyCommitment);
+    const signatureCommitment = Buffer.from(anchorProof.signatureCommitment);
+    const [registry] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
+    const [contract] = PublicKey.findProgramAddressSync([CONTRACT_SEED, hash], PROGRAM_ID);
+    const [signature] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, contract.toBuffer(), key, signatureCommitment], PROGRAM_ID);
+    const [signerRecord] = PublicKey.findProgramAddressSync([Buffer.from('oblivia_signer_record'), hash, key], PROGRAM_ID);
+    const [multisig] = PublicKey.findProgramAddressSync([MULTISIG_SEED, hash], PROGRAM_ID);
+    const [multisigMember] = PublicKey.findProgramAddressSync([MULTISIG_MEMBER_SEED, multisig.toBuffer(), key], PROGRAM_ID);
+    const verify = await program.methods.verifyGroth16V2(
+        anchorProof.proofA, anchorProof.proofB, anchorProof.proofC, anchorProof.publicInputs,
+        Array.from(key), Array.from(signatureCommitment),
+    ).accounts({ registry, contract, signature, signerRecord, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+    const record = await program.methods.recordVerifiedMultisig(Array.from(hash), Array.from(key))
+        .accounts({ registry, contract, multisig, multisigMember, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+    return provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
+}
+
+module.exports.submitVerifiedMultiSig = submitVerifiedMultiSig;
 
 async function createMultisig(contractHash, threshold, maxSigners) {
     const keypair = getKeypair();

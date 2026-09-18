@@ -1,10 +1,32 @@
 const { sha256 } = require('@noble/hashes/sha2.js');
-const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
-const { Noir } = require('@noir-lang/noir_js');
-const circuit = require('../../zk_intent_circuit/target/zk_intent_circuit.json');
+const snarkjs = require('snarkjs');
 const tf = require('@tensorflow/tfjs');
 const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
 const RELAY_URL = 'https://oblivia-relay.onrender.com';
+const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
+
+function fieldBytes(value) {
+    let n = BigInt(value); const out = new Uint8Array(32);
+    for (let i = 31; i >= 0; i--) { out[i] = Number(n & 255n); n >>= 8n; }
+    return out;
+}
+
+function contractHashLimbs(hash) {
+    const hex = Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
+    return [BigInt('0x' + hex.slice(0, 32)).toString(), BigInt('0x' + hex.slice(32)).toString()];
+}
+
+function anchorProof(proof, signals) {
+    const aY = BigInt(proof.pi_a[1]);
+    return {
+        proofA: Array.from([...fieldBytes(proof.pi_a[0]), ...fieldBytes(FIELD_MODULUS - aY)]),
+        proofB: Array.from([...fieldBytes(proof.pi_b[0][1]), ...fieldBytes(proof.pi_b[0][0]), ...fieldBytes(proof.pi_b[1][1]), ...fieldBytes(proof.pi_b[1][0])]),
+        proofC: Array.from([...fieldBytes(proof.pi_c[0]), ...fieldBytes(proof.pi_c[1])]),
+        publicInputs: Array.from(signals.flatMap(fieldBytes)),
+        keyCommitment: Array.from(fieldBytes(signals[0])),
+        signatureCommitment: Array.from(fieldBytes(signals[1])),
+    };
+}
 
 let biometricCaptured = false;
 let biometricFeatures = null;
@@ -156,27 +178,22 @@ window.signContract = async function() {
     log('Contract hash computed');
     
     log('Generating ZK proof... (this takes a moment)');
-    const api = await Barretenberg.new({ threads: 1 });
-    const backend = new UltraHonkBackend(circuit.bytecode, api);
-    const noir = new Noir(circuit);
+    const [contract_hash_lo, contract_hash_hi] = contractHashLimbs(contractHash);
     const input = {
-        contract_hash: contractHash,
-        signer_key: BigInt('0x' + signingKey.slice(0, 62)).toString(),
+        contract_hash_lo, contract_hash_hi,
+        signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
         timestamp: Date.now().toString()
     };
-    const { witness } = await noir.execute(input);
-    const proof = await backend.generateProof(witness);
-    const zkVerified = await backend.verifyProof(proof);
-    await api.destroy();
-    if (!zkVerified) { log('Proof verification failed'); return; }
+    const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
+    const payload = anchorProof(proof, publicSignals);
     log('Proof generated successfully', 'success');
     log('Verifying proof...');
     log('Proof verified', 'success');
-    const proofPreview = Buffer.from(proof.proof).toString('hex').slice(0, 16) + '...';
+    const proofPreview = payload.proofA.slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('') + '...';
     document.getElementById('proofDisplay').textContent = proofPreview;
 
-    const keyCommitment = '0x' + BigInt(proof.publicInputs[0]).toString(16).padStart(64, '0');
-    const signatureCommitment = '0x' + BigInt(proof.publicInputs[1]).toString(16).padStart(64, '0');
+    const keyCommitment = '0x' + Buffer.from(payload.keyCommitment).toString('hex');
+    const signatureCommitment = '0x' + Buffer.from(payload.signatureCommitment).toString('hex');
 
     log('Submitting to Solana... (sponsored — free to you)');
     try {
@@ -186,7 +203,8 @@ window.signContract = async function() {
             body: JSON.stringify({
                 contractHash: Array.from(contractHash),
                 keyCommitment,
-                signatureCommitment
+                signatureCommitment,
+                proofA: payload.proofA, proofB: payload.proofB, proofC: payload.proofC, publicInputs: payload.publicInputs
             })
         });
         const data = await response.json();

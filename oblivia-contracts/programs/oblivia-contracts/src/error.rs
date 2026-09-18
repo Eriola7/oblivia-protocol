@@ -16,4 +16,6 @@ pub enum ObliviaError {
     PairingFailed,
     #[msg("Invalid Groth16 proof")]
     InvalidProof,
+    #[msg("Signature submission is disabled until a contract-bound proof verifier is configured")]
+    ProofBindingUnavailable,
 }

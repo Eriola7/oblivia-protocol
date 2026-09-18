@@ -31,6 +31,10 @@ function hexToBytes32(hexStr) {
 async function main() {
     console.log('=== Oblivia Groth16 On-Chain Verification ===\n');
 
+    throw new Error(
+        'This script targets the retired two-public-input verifier. Regenerate the Rust verifying-key constants from verification_key.json, deploy a new program, and submit the four public inputs (contract hash limbs, key commitment, signature commitment) before using it.'
+    );
+
     // Step 1: Generate Groth16 proof
     console.log('Generating Groth16 proof...');
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(

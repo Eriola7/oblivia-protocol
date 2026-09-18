@@ -113,7 +113,7 @@ async function submitSignature(contractHash, keyCommitment, signatureCommitment)
     );
 
     const [signaturePda] = PublicKey.findProgramAddressSync(
-        [SIGNATURE_SEED, keyCommitmentBytes, sigCommitmentBytes],
+        [SIGNATURE_SEED, contractPda.toBuffer(), keyCommitmentBytes, sigCommitmentBytes],
         PROGRAM_ID
     );
 
@@ -228,7 +228,7 @@ async function submitMultisigSignature(contractHash, keyCommitment, signatureCom
 
     const [registryPda] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
     const [contractPda] = PublicKey.findProgramAddressSync([CONTRACT_SEED, contractHashBytes], PROGRAM_ID);
-    const [signaturePda] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, keyCommitmentBytes, sigCommitmentBytes], PROGRAM_ID);
+    const [signaturePda] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, contractPda.toBuffer(), keyCommitmentBytes, sigCommitmentBytes], PROGRAM_ID);
     const [multisigPda] = PublicKey.findProgramAddressSync([MULTISIG_SEED, contractHashBytes], PROGRAM_ID);
     const [memberPda] = PublicKey.findProgramAddressSync([MULTISIG_MEMBER_SEED, multisigPda.toBuffer(), keyCommitmentBytes], PROGRAM_ID);
 
@@ -272,3 +272,33 @@ async function finalizeMultisig(contractHash) {
     console.log('Explorer: https://explorer.solana.com/tx/' + tx + '?cluster=devnet');
     return tx;
 }
+
+async function submitVerifiedGroth16(contractHash, proof) {
+    const keypair = getKeypair(), provider = getProvider(keypair), program = await getProgram(provider);
+    const hash = Buffer.from(contractHash), key = Buffer.from(proof.keyCommitment), sig = Buffer.from(proof.signatureCommitment);
+    const [registry] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
+    const [contract] = PublicKey.findProgramAddressSync([CONTRACT_SEED, hash], PROGRAM_ID);
+    const [signature] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, contract.toBuffer(), key, sig], PROGRAM_ID);
+    const [signerRecord] = PublicKey.findProgramAddressSync([Buffer.from('oblivia_signer_record'), hash, key], PROGRAM_ID);
+    return program.methods.verifyGroth16V2(proof.proofA, proof.proofB, proof.proofC, proof.publicInputs, Array.from(key), Array.from(sig))
+        .accounts({ registry, contract, signature, signerRecord, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).signers([keypair]).rpc();
+}
+
+async function submitVerifiedMultiSig(contractHash, proof) {
+    const keypair = getKeypair(), provider = getProvider(keypair), program = await getProgram(provider);
+    const hash = Buffer.from(contractHash), key = Buffer.from(proof.keyCommitment), sig = Buffer.from(proof.signatureCommitment);
+    const [registry] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
+    const [contract] = PublicKey.findProgramAddressSync([CONTRACT_SEED, hash], PROGRAM_ID);
+    const [signature] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, contract.toBuffer(), key, sig], PROGRAM_ID);
+    const [signerRecord] = PublicKey.findProgramAddressSync([Buffer.from('oblivia_signer_record'), hash, key], PROGRAM_ID);
+    const [multisig] = PublicKey.findProgramAddressSync([MULTISIG_SEED, hash], PROGRAM_ID);
+    const [member] = PublicKey.findProgramAddressSync([MULTISIG_MEMBER_SEED, multisig.toBuffer(), key], PROGRAM_ID);
+    const verify = await program.methods.verifyGroth16V2(proof.proofA, proof.proofB, proof.proofC, proof.publicInputs, Array.from(key), Array.from(sig))
+        .accounts({ registry, contract, signature, signerRecord, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+    const record = await program.methods.recordVerifiedMultisig(Array.from(hash), Array.from(key))
+        .accounts({ registry, contract, multisig, multisigMember: member, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+    return provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
+}
+
+module.exports.submitVerifiedGroth16 = submitVerifiedGroth16;
+module.exports.submitVerifiedMultiSig = submitVerifiedMultiSig;

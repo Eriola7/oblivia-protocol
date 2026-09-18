@@ -66,7 +66,7 @@ impl MultiSigContract {
         + 1   // max_signers
         + 1   // finalized
         + 8   // finalized_at
-        + 1;  // bump
+        + 1; // bump
 }
 
 /// Tracks a unique signer in a multisig

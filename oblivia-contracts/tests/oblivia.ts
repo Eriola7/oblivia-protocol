@@ -26,7 +26,7 @@ describe("Oblivia Protocol", () => {
   const keyCommitment = Array.from(Buffer.alloc(32, 1));
   const sigCommitment = Array.from(Buffer.alloc(32, 2));
   const [signaturePda] = PublicKey.findProgramAddressSync(
-    [SIGNATURE_SEED, Buffer.from(keyCommitment), Buffer.from(sigCommitment)],
+    [SIGNATURE_SEED, contractPda.toBuffer(), Buffer.from(keyCommitment), Buffer.from(sigCommitment)],
     program.programId
   );
 

@@ -1,7 +1,7 @@
-use anchor_lang::prelude::*;
-use crate::state::{Contract, MultiSigContract};
 use crate::constants::{CONTRACT_SEED, MULTISIG_SEED};
 use crate::error::ObliviaError;
+use crate::state::{Contract, MultiSigContract};
+use anchor_lang::prelude::*;
 
 pub fn create_multisig_handler(
     ctx: Context<CreateMultiSig>,

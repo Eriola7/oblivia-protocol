@@ -7,16 +7,20 @@ include "node_modules/circomlib/circuits/poseidon.circom";
  * 
  * Proves:
  * 1. Signer knows a private key (key_commitment = Poseidon(signer_key))
- * 2. Signature binds to specific contract + timestamp
- *    (sig_commitment = Poseidon(signer_key, contract_hash, timestamp))
+ * 2. Signature binds to a canonical 32-byte contract hash and timestamp.
  *
- * Private inputs: signer_key, contract_hash, timestamp
+ * The hash is represented as two 128-bit big-endian limbs. Both limbs are
+ * public inputs so the on-chain program can compare them to its Contract PDA.
+ *
+ * Private inputs: signer_key, timestamp
+ * Public inputs: contract_hash_lo, contract_hash_hi
  * Public outputs: key_commitment, sig_commitment
  */
 template OblividIntent() {
     // Private inputs
     signal input signer_key;
-    signal input contract_hash;
+    signal input contract_hash_lo;
+    signal input contract_hash_hi;
     signal input timestamp;
 
     // Public outputs
@@ -39,11 +43,12 @@ template OblividIntent() {
     key_commitment <== key_hasher.out;
 
     // Signature commitment — binds key + contract + timestamp
-    component sig_hasher = Poseidon(3);
+    component sig_hasher = Poseidon(4);
     sig_hasher.inputs[0] <== signer_key;
-    sig_hasher.inputs[1] <== contract_hash;
-    sig_hasher.inputs[2] <== timestamp;
+    sig_hasher.inputs[1] <== contract_hash_lo;
+    sig_hasher.inputs[2] <== contract_hash_hi;
+    sig_hasher.inputs[3] <== timestamp;
     sig_commitment <== sig_hasher.out;
 }
 
-component main = OblividIntent();
+component main {public [contract_hash_lo, contract_hash_hi]} = OblividIntent();
