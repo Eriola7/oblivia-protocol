@@ -1,90 +1,82 @@
 # Oblivia Protocol
 
-> **Security status:** signing and multisig submission are intentionally disabled in the hardened program until the contract-bound Groth16 verifying key is integrated and a replacement program is deployed. This repository is not ready for production use.
+> **Devnet status:** the contract-bound Groth16 v2 verifier is deployed to Solana Devnet at `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`.
 
-## Current proof migration
+Oblivia is an open-source, zero-identity contract-signing primitive for Solana. A signer proves knowledge of an on-device-derived signing key and its binding to a specific contract without publishing the key or biometric inputs.
 
-`zk_groth16/oblivia.circom` now exposes the two 128-bit limbs of the canonical SHA-256 contract hash as public inputs. A proof therefore binds its key and signature commitments to the complete contract hash. The regenerated development verification key has four public signals; it must be integrated into a newly deployed Anchor program before signing is re-enabled. The current devnet program and the retired on-chain demo target the previous two-signal circuit and must not be used for new attestations.
+## Security status
 
-> Forget who I am. Remember what I signed.
+The Devnet program is suitable for integration testing, not production use. The current Groth16 proving key is a development artifact. A production ceremony, independent security review, release hardening, operational monitoring, and a Mainnet deployment remain future work.
 
-Zero-identity contract signing protocol for Solana. Sign legally binding agreements with full cryptographic provability and zero identity disclosure.
+No biometric sample is submitted to the protocol. The biometric client derives a local signing input; the proof system receives only that private scalar and public contract-binding data. Biometric matching and entropy guarantees have not received an independent security audit.
 
-No government ID. No KYC. No centralized server. No fees. Ever.
+## Current architecture
 
-## What Is Built
+```text
+Facial geometry (local)
+        │
+        ▼
+Fuzzy extractor → private signing scalar
+        │
+        ▼
+Circom Groth16 circuit
+  private: signer key, timestamp
+  public: key commitment, signature commitment,
+          SHA-256(contract)[0..15], SHA-256(contract)[16..31]
+        │
+        ▼
+Solana v2 verifier → signature PDA → optional multisig member PDA
+```
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| ZK Intent Circuit | ✅ Complete | Noir circuit, Pedersen commitment, UltraHonk proof, 2 public outputs, verified |
-| Biometric Entropy Client | ✅ Complete | Fuzzy extractor, generate/reproduce API, secure sketch, variance testing |
-| Browser Client | ✅ Complete | TensorFlow + MediaPipe, on-device biometric key derivation |
-| Node.js Integration | ✅ Complete | Biometric to ZK proof to Anchor program to on-chain verified |
-| Anchor Smart Contracts | ✅ Deployed | Program ID: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG - 8 instructions |
-| On-chain ZK Proof Verification | ✅ Live | Groth16 proof verified on Solana devnet via alt_bn128 pairing syscalls — 93,609 CU |
-| Groth16 Circuit | ✅ Complete | Circom circuit, trusted setup, 482 constraints, 2 public outputs |
-| Multi-sig Support | ✅ Complete | Anonymous M-of-N threshold signing — create, submit, finalize on-chain |
-| SLOL v1 Schema | 🔨 In Progress | Schema design started — NDA, DAO governance, whistleblower, inheritance, ZeroIDDeal. Full standard and jurisdictional compliance documentation in development |
-| TypeScript Tests | ✅ 6/6 passing | Full test suite running against Solana devnet |
-| Browser ZK Proof | ✅ Complete | Real Barretenberg WASM proving on-device — SDK integration scoped Milestone 3 |
-| Witness Network | 🔨 Building | Permissionless notarization nodes |
-| Reference dApps | 📅 Planned | Anonymous signing and DAO governance tools |
-| Security Audit | 📅 Planned | Independent third-party audit |
-| Mainnet Launch | 📅 Planned | Full public deployment |
+The same Groth16 relation is proven by the client and verified by the on-chain program. The program checks all four public inputs, including both 128-bit limbs of the complete SHA-256 contract hash, before recording an attestation. This prevents a valid proof from being replayed for a different contract.
 
-## Live On-Chain
+## What is implemented
 
-Anchor Program: HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG
-Explorer: https://explorer.solana.com/address/HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG?cluster=devnet
+| Component | State |
+| --- | --- |
+| Contract-bound Groth16 circuit | Implemented; four public signals |
+| On-chain Groth16 v2 verifier | Deployed on Devnet via Solana `alt_bn128` syscalls |
+| Single-signature attestation | Implemented through `verify_groth16_v2` |
+| Anonymous threshold multisig | Implemented as atomic verification plus member recording |
+| Browser reference client | Builds with local, browser-side Groth16 proving |
+| Node SDK | Generates and locally verifies Groth16 proofs before submission |
+| Sponsored relay | Implements v2 submission endpoints with origin controls and basic in-memory rate limits |
 
-Latest verified signature transaction:
-https://explorer.solana.com/tx/okwMA55ouBCb8KTaFU5Z4WLhsa3zpUFf7k5TTyy2yMeRK6HcmmiuvCBuCgg4JugyEAaooUWUYqkXio9SGhPaQ9p?cluster=devnet
+## Repository layout
 
-## Quick Start
+- `zk_groth16/` — Circom circuit, proving artifacts, proof serializer, and contract-binding test.
+- `oblivia-contracts/` — Anchor program and the compile-time Groth16 verification-key generator.
+- `sdk/` — Node and browser proof-generation entrypoints plus Anchor submission helpers.
+- `browser-client/` — reference single-signature and multisig clients.
+- `relay/` — sponsored Devnet relay.
+- `biometric-entropy-client/` — local feature extraction and key-derivation utilities.
 
-ZK Circuit:
-  cd zk_intent_circuit && nargo test && nargo compile && nargo execute
+`zk_intent_circuit/` is retained as a historical Noir experiment. It is not used by the deployed verifier, relay, reference client, or current SDK flow.
 
-Biometric Client:
-  cd biometric-entropy-client && npm install && node test.js
+## Local verification
 
-Full Pipeline:
-  npm install && node integration.js
+```bash
+npm --prefix zk_groth16 run test:binding
+cd oblivia-contracts && cargo check -p oblivia-contracts
+npm --prefix browser-client run build
+npm --prefix sdk run test:proof
+```
 
-Anchor Tests:
-  cd oblivia-contracts && anchor test --skip-local-validator
+## Devnet program
 
-## Anchor Program Instructions
+Program ID: `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`
 
-- initialize: Create global contract registry
-- register_contract: Store contract hash on-chain
-- submit_signature: Submit ZK proof commitments with SignerRecord PDA deduplication
-- verify_signature: Verify signature on-chain
-- create_multisig: Create M-of-N anonymous multi-sig
-- submit_multisig_signature: Submit ZK commitment to multisig with MultiSigMember deduplication
-- finalize_multisig: Finalize when threshold reached
-- verify_groth16: Verify Groth16 ZK proof on-chain via alt_bn128 syscalls
+The current v2 entrypoints are:
 
-## Implementation Notes
+- `verify_groth16_v2` — validates the Groth16 proof and atomically records the contract-bound anonymous signature.
+- `record_verified_multisig` — records a verified signer for a multisig agreement and finalizes it automatically at the threshold.
 
-Browser ZK proof generation runs via real Barretenberg WASM in the browser client. Full Anchor SDK integration for browser-native proving is scoped for Milestone 3.
+Older commitment-only submission instructions are retained only for compatibility and fail closed. New integrations must use the v2 path.
 
-Run the real proving pipeline: npm install && node integration.js
+## Development notes
+
+The relay and reference clients must be deployed and configured together. Set `OBLIVIA_ALLOWED_ORIGINS` to the actual reference-app origins before exposing the relay; do not use its development configuration as production infrastructure.
 
 ## License
 
-MIT - free to use, fork, and build on forever.
-
-## Groth16 On-Chain Verification
-
-Real ZK proof verified on Solana devnet using alt_bn128 pairing syscalls:
-
-**Transaction:** `3wsxfRkPJhR4L5j1yAnezvMQaY1sAYry2nFqa3JyNS8G2ZzjaH6DoXUzYcQr4PgeC2Jx1V99UMworsC7iyLmfVET`
-
-**Explorer:** https://explorer.solana.com/tx/3wsxfRkPJhR4L5j1yAnezvMQaY1sAYry2nFqa3JyNS8G2ZzjaH6DoXUzYcQr4PgeC2Jx1V99UMworsC7iyLmfVET?cluster=devnet
-
-- Program: ObliviaContracts — `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`
-- Instruction: VerifyGroth16
-- Compute units: 93,609
-- Result: Success — Finalized
-- Identity revealed: false
+MIT

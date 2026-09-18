@@ -1,69 +1,61 @@
 /**
- * Oblivia SDK — Browser entry point.
+ * Oblivia SDK browser entry point.
  *
- * On-device operations only: biometric key derivation and ZK proof
- * generation via Barretenberg WASM. No Node dependencies, no keypairs,
- * nothing leaves the browser.
- *
- * On-chain submission from the browser is done through the developer's
- * own wallet adapter — see reference dApps for the full pattern.
- *
- * Usage (with a bundler):
- *   import { deriveKey, generateProof } from '@oblivia/sdk/browser';
+ * Proving is entirely local, using the same Groth16 circuit and verification
+ * key accepted by the v2 Solana program. Callers supply URLs for the WASM and
+ * proving key so their bundler or asset host controls delivery.
  */
-
-const { Noir } = require('@noir-lang/noir_js');
-const { Barretenberg, UltraHonkBackend } = require('@aztec/bb.js');
+const snarkjs = require('snarkjs');
 const { generate } = require('./lib/fuzzyExtractor');
-const circuit = require('./lib/circuit.json');
+const verificationKey = require('./lib/proving/verification_key.json');
 
-/**
- * Derive a signing key from biometric features. Entirely on-device.
- * @param {number[]} biometricFeatures - 20 normalized facial geometry ratios
- * @returns {string} hex-encoded signing key
- */
 function deriveKey(biometricFeatures) {
-    const { key } = generate(biometricFeatures);
-    return key;
+    return generate(biometricFeatures).key;
+}
+
+function toField(bytes) {
+    return BigInt('0x' + Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')).toString();
+}
+
+async function hashContract(contractData) {
+    if (!globalThis.crypto || !globalThis.crypto.subtle) {
+        throw new Error('WebCrypto is required for browser-side contract hashing');
+    }
+    const data = typeof contractData === 'string'
+        ? new TextEncoder().encode(contractData)
+        : contractData;
+    return new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', data));
 }
 
 /**
- * Generate a ZK proof of contract signing in the browser.
- * Real Barretenberg WASM proving — no simulation, no server round-trip.
- * @param {number[]} biometricFeatures
- * @param {string|Uint8Array} contractData
- * @returns {Promise<{proof: Uint8Array, publicInputs: string[], verified: boolean}>}
+ * Generate and locally verify a contract-bound Groth16 proof.
+ *
+ * @param {number[]} biometricFeatures normalized local facial measurements
+ * @param {string|Uint8Array} contractData canonical contract bytes
+ * @param {{wasmUrl: string, zkeyUrl: string}} provingAssets publicly served circuit artifacts
  */
-async function generateProof(biometricFeatures, contractData) {
+async function generateProof(biometricFeatures, contractData, provingAssets) {
+    if (!provingAssets || !provingAssets.wasmUrl || !provingAssets.zkeyUrl) {
+        throw new Error('provingAssets.wasmUrl and provingAssets.zkeyUrl are required');
+    }
+
     const signingKey = deriveKey(biometricFeatures);
-
-    const contractBytes = typeof contractData === 'string'
-        ? new TextEncoder().encode(contractData)
-        : contractData;
-
-    // SHA-256 via WebCrypto (browser-native)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', contractBytes);
-    const contractHash = Array.from(new Uint8Array(hashBuffer)).slice(0, 32);
-
-    const api = await Barretenberg.new({ threads: 1 });
-    const backend = new UltraHonkBackend(circuit.bytecode, api);
-    const noir = new Noir(circuit);
-
-    const { witness } = await noir.execute({
-        contract_hash: contractHash,
-        signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
+    const contractHash = await hashContract(contractData);
+    const input = {
+        signer_key: BigInt('0x' + signingKey).toString(),
+        contract_hash_lo: toField(contractHash.slice(0, 16)),
+        contract_hash_hi: toField(contractHash.slice(16, 32)),
         timestamp: Date.now().toString()
-    });
-
-    const proofData = await backend.generateProof(witness);
-    const verified = await backend.verifyProof(proofData);
-    await api.destroy();
-
-    return {
-        proof: proofData.proof,
-        publicInputs: proofData.publicInputs,
-        verified
     };
+    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+        input,
+        provingAssets.wasmUrl,
+        provingAssets.zkeyUrl
+    );
+    const verified = await snarkjs.groth16.verify(verificationKey, publicSignals, proof);
+    if (!verified) throw new Error('local Groth16 proof verification failed');
+
+    return { contractHash: Array.from(contractHash), proof, publicInputs: publicSignals, verified };
 }
 
 module.exports = { deriveKey, generateProof };

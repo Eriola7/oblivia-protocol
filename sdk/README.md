@@ -73,7 +73,7 @@ Full TypeScript definitions ship with the package (`index.d.ts`).
 ## How It Works
 
 1. **Biometric → key.** A fuzzy extractor derives a stable cryptographic key from facial geometry. Same face, same key. Different face, different key. Nothing leaves the device.
-2. **Key → proof.** A Noir circuit (UltraHonk backend) proves knowledge of the key and binds it to the contract hash and timestamp — without revealing the key.
+2. **Key → proof.** A Circom Groth16 circuit proves knowledge of the key and binds it to the full SHA-256 contract hash and timestamp — without revealing the key.
 3. **Proof → chain.** Commitments are stored on the Oblivia Anchor program. A Groth16 verifier checks proofs fully on-chain via Solana's alt_bn128 syscalls.
 
 **Program ID (devnet):** `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`
