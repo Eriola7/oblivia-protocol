@@ -167,6 +167,9 @@ window.signContract = async function() {
     
     document.getElementById('signBtn').disabled = true;
     document.getElementById('log').innerHTML = '';
+    document.getElementById('result').classList.remove('show');
+    document.getElementById('contractSignedDisplay').textContent = 'PENDING';
+    document.getElementById('txDisplay').textContent = 'pending...';
     
     log('Deriving signing key from biometric...');
     const signingKey = deriveKey(biometricFeatures);
@@ -210,17 +213,22 @@ window.signContract = async function() {
         const data = await response.json();
         if (data.error) {
             log('Submission failed: ' + data.error);
+            document.getElementById('contractSignedDisplay').textContent = 'FALSE';
+            document.getElementById('txDisplay').textContent = 'not submitted — retry after resolving the relay error';
         } else {
             log('Signed on-chain — identity concealed', 'success');
+            document.getElementById('contractSignedDisplay').textContent = 'TRUE';
             document.getElementById('txDisplay').innerHTML =
                 'Verified on-chain: <a href="' + data.explorer + '" target="_blank">' +
                 data.transaction.slice(0, 20) + '...</a>';
+            log('Done. Identity: concealed. Proof: on-chain.', 'success');
         }
     } catch (e) {
         log('Relay error: ' + e.message);
+        document.getElementById('contractSignedDisplay').textContent = 'FALSE';
+        document.getElementById('txDisplay').textContent = 'not submitted — retry after resolving the relay error';
     }
 
     document.getElementById('result').classList.add('show');
     document.getElementById('signBtn').disabled = false;
-    log('Done. Identity: concealed. Proof: on-chain.', 'success');
 }

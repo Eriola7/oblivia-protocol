@@ -77,6 +77,21 @@ function getProgram() {
 
 app.get('/', (req, res) => res.json({ status: 'Oblivia relay live' }));
 
+// Lets the public client distinguish a healthy relay from a relay whose
+// sponsor key was entered incorrectly, without exposing the key itself.
+app.get('/health', (req, res) => {
+    try {
+        const secretHex = process.env.OBLIVIA_DEVNET_KEY;
+        if (typeof secretHex !== 'string' || !/^[0-9a-fA-F]{128}$/.test(secretHex)) {
+            return res.status(503).json({ status: 'signer misconfigured' });
+        }
+        Keypair.fromSecretKey(Buffer.from(secretHex, 'hex'));
+        return res.json({ status: 'ready' });
+    } catch (_) {
+        return res.status(503).json({ status: 'signer misconfigured' });
+    }
+});
+
 app.post('/sign', limitSponsoredRequest, async (req, res) => {
     try {
         const { contractHash, keyCommitment, signatureCommitment, proofA, proofB, proofC, publicInputs } = req.body;
