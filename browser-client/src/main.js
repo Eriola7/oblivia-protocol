@@ -22,7 +22,9 @@ function anchorProof(proof, signals) {
         proofA: Array.from([...fieldBytes(proof.pi_a[0]), ...fieldBytes(FIELD_MODULUS - aY)]),
         proofB: Array.from([...fieldBytes(proof.pi_b[0][1]), ...fieldBytes(proof.pi_b[0][0]), ...fieldBytes(proof.pi_b[1][1]), ...fieldBytes(proof.pi_b[1][0])]),
         proofC: Array.from([...fieldBytes(proof.pi_c[0]), ...fieldBytes(proof.pi_c[1])]),
-        publicInputs: Array.from(signals.flatMap(fieldBytes)),
+        // Uint8Array values are not flattened by Array.prototype.flatMap.
+        // Expand each 32-byte field explicitly for Anchor's [u8; 128] input.
+        publicInputs: signals.flatMap(signal => Array.from(fieldBytes(signal))),
         keyCommitment: Array.from(fieldBytes(signals[0])),
         signatureCommitment: Array.from(fieldBytes(signals[1])),
     };

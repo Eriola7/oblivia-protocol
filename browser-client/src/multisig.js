@@ -8,7 +8,7 @@ const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297
 
 function fieldBytes(value) { let n = BigInt(value); const out = new Uint8Array(32); for (let i = 31; i >= 0; i--) { out[i] = Number(n & 255n); n >>= 8n; } return out; }
 function grothPayload(proof, signals) {
-  return { proofA: Array.from([...fieldBytes(proof.pi_a[0]), ...fieldBytes(FIELD_MODULUS - BigInt(proof.pi_a[1]))]), proofB: Array.from([...fieldBytes(proof.pi_b[0][1]), ...fieldBytes(proof.pi_b[0][0]), ...fieldBytes(proof.pi_b[1][1]), ...fieldBytes(proof.pi_b[1][0])]), proofC: Array.from([...fieldBytes(proof.pi_c[0]), ...fieldBytes(proof.pi_c[1])]), publicInputs: Array.from(signals.flatMap(fieldBytes)), keyCommitment: Array.from(fieldBytes(signals[0])), signatureCommitment: Array.from(fieldBytes(signals[1])) };
+  return { proofA: Array.from([...fieldBytes(proof.pi_a[0]), ...fieldBytes(FIELD_MODULUS - BigInt(proof.pi_a[1]))]), proofB: Array.from([...fieldBytes(proof.pi_b[0][1]), ...fieldBytes(proof.pi_b[0][0]), ...fieldBytes(proof.pi_b[1][1]), ...fieldBytes(proof.pi_b[1][0])]), proofC: Array.from([...fieldBytes(proof.pi_c[0]), ...fieldBytes(proof.pi_c[1])]), publicInputs: signals.flatMap(signal => Array.from(fieldBytes(signal))), keyCommitment: Array.from(fieldBytes(signals[0])), signatureCommitment: Array.from(fieldBytes(signals[1])) };
 }
 
 let biometricCaptured = false;
