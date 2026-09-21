@@ -1,11 +1,13 @@
 require('dotenv').config();
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
+const { validateMultisigConfig, assertMultisigConfig } = require('./sdk/lib/multisig_config');
 
 const PROGRAM_ID = new PublicKey('HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG');
 const REGISTRY_SEED = Buffer.from('oblivia_registry');
 const CONTRACT_SEED = Buffer.from('oblivia_contract');
 const MULTISIG_SEED = Buffer.from("oblivia_multisig");
+const MULTISIG_MEMBER_SEED = Buffer.from('oblivia_multisig_member');
 const SIGNATURE_SEED = Buffer.from('oblivia_signature');
 
 const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
@@ -226,13 +228,14 @@ async function submitVerifiedMultiSig(contractHash, anchorProof) {
         Array.from(key), Array.from(signatureCommitment),
     ).accounts({ registry, contract, signature, signerRecord, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
     const record = await program.methods.recordVerifiedMultisig(Array.from(hash), Array.from(key))
-        .accounts({ registry, contract, multisig, multisigMember, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+        .accounts({ registry, contract, multisig, signerRecord, multisigMember, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
     return provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
 }
 
 module.exports.submitVerifiedMultiSig = submitVerifiedMultiSig;
 
 async function createMultisig(contractHash, threshold, maxSigners) {
+    validateMultisigConfig(threshold, maxSigners);
     const keypair = getKeypair();
     const provider = getProvider(keypair);
     const program = await getProgram(provider);
@@ -248,6 +251,7 @@ async function createMultisig(contractHash, threshold, maxSigners) {
 
     const existing = await connection.getAccountInfo(multisigPda);
     if (existing) {
+        assertMultisigConfig(await program.account.multiSigContract.fetch(multisigPda), threshold, maxSigners);
         console.log('MultiSig already exists:', multisigPda.toString());
         return { multisigPda, tx: null };
     }

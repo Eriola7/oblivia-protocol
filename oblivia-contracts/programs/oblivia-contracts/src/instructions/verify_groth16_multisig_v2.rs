@@ -1,11 +1,12 @@
-use crate::constants::{CONTRACT_SEED, MULTISIG_MEMBER_SEED, MULTISIG_SEED, REGISTRY_SEED};
+use crate::constants::{
+    CONTRACT_SEED, MULTISIG_MEMBER_SEED, MULTISIG_SEED, REGISTRY_SEED, SIGNER_RECORD_SEED,
+};
 use crate::error::ObliviaError;
-use crate::state::{Contract, ContractRegistry, MultiSigContract, MultiSigMember};
+use crate::state::{Contract, ContractRegistry, MultiSigContract, MultiSigMember, SignerRecord};
 use anchor_lang::prelude::*;
 
-// Multisig collection is deliberately deferred to the already contract-bound
-// verifier. The v2 verifier's signature account prevents a commitment from
-// being counted before proof verification; this account records threshold state.
+// Only the contract-bound verifier can create a committed SignerRecord.
+// Require that program-owned PDA here, even when called without the relay.
 #[derive(Accounts)]
 #[instruction(contract_hash: [u8; 32], key_commitment: [u8; 32])]
 pub struct RecordVerifiedMultiSig<'info> {
@@ -13,8 +14,15 @@ pub struct RecordVerifiedMultiSig<'info> {
     pub registry: Account<'info, ContractRegistry>,
     #[account(mut, seeds = [CONTRACT_SEED, &contract_hash], bump = contract.bump)]
     pub contract: Account<'info, Contract>,
-    #[account(mut, seeds = [MULTISIG_SEED, &contract_hash], bump = multisig.bump)]
+    #[account(mut, seeds = [MULTISIG_SEED, &contract_hash], bump = multisig.bump, has_one = contract)]
     pub multisig: Account<'info, MultiSigContract>,
+    #[account(
+        seeds = [SIGNER_RECORD_SEED, &contract_hash, &key_commitment],
+        bump = signer_record.bump,
+        has_one = contract,
+        constraint = signer_record.key_commitment == key_commitment @ ObliviaError::InvalidKeyCommitment
+    )]
+    pub signer_record: Account<'info, SignerRecord>,
     #[account(init, payer = payer, space = MultiSigMember::LEN, seeds = [MULTISIG_MEMBER_SEED, multisig.key().as_ref(), &key_commitment], bump)]
     pub multisig_member: Account<'info, MultiSigMember>,
     #[account(mut)]
@@ -26,6 +34,7 @@ pub fn record_verified_multisig_handler(
     ctx: Context<RecordVerifiedMultiSig>,
     key_commitment: [u8; 32],
 ) -> Result<()> {
+    require!(ctx.accounts.contract.active, ObliviaError::ContractInactive);
     require!(
         !ctx.accounts.multisig.finalized,
         ObliviaError::ContractInactive

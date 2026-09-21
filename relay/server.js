@@ -4,6 +4,7 @@ const path = require('path');
 const cors = require('cors');
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
+const { validateMultisigConfig, assertMultisigConfig } = require('../sdk/lib/multisig_config');
 
 const app = express();
 const relayOrigins = (process.env.OBLIVIA_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
@@ -160,6 +161,7 @@ app.post('/sign', limitSponsoredRequest, async (req, res) => {
 app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
     try {
         const { contractHash, threshold, maxSigners } = req.body;
+        validateMultisigConfig(threshold, maxSigners);
         const contractHashBytes = parseBytes32(contractHash, 'contractHash');
         const { program, keypair } = getProgram();
 
@@ -176,6 +178,8 @@ app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
 
         const multisigInfo = await connection.getAccountInfo(multisigPda);
         if (multisigInfo) {
+            const existing = await program.account.multiSigContract.fetch(multisigPda);
+            assertMultisigConfig(existing, threshold, maxSigners);
             return res.json({ alreadyExists: true, multisig: multisigPda.toString() });
         }
 
@@ -206,7 +210,7 @@ app.post('/multisig/sign', limitSponsoredRequest, async (req, res) => {
             Array.from(keyCommitmentBytes), Array.from(sigCommitmentBytes)
         ).accounts({ registry: registryPda, contract: contractPda, signature: signaturePda, signerRecord: PublicKey.findProgramAddressSync([Buffer.from('oblivia_signer_record'), contractHashBytes, keyCommitmentBytes], PROGRAM_ID)[0], payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
         const record = await program.methods.recordVerifiedMultisig(Array.from(contractHashBytes), Array.from(keyCommitmentBytes))
-            .accounts({ registry: registryPda, contract: contractPda, multisig: multisigPda, multisigMember: memberPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+            .accounts({ registry: registryPda, contract: contractPda, multisig: multisigPda, signerRecord: PublicKey.findProgramAddressSync([Buffer.from('oblivia_signer_record'), contractHashBytes, keyCommitmentBytes], PROGRAM_ID)[0], multisigMember: memberPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
         const tx = await program.provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
 
         const ms = await program.account.multiSigContract.fetch(multisigPda);

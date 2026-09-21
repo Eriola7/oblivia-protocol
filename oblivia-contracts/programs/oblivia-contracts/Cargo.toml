@@ -33,6 +33,7 @@ solana-program = "2.3.0"
 serde_json = "1"
 
 [dev-dependencies]
+serde_json = "1"
 litesvm = "0.10.0"
 solana-message = "3.0.1"
 solana-transaction = "3.0.2"

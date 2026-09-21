@@ -333,7 +333,11 @@
                 "path": "contract_hash"
               }
             ]
-          }
+          },
+          "relations": [
+            "multisig",
+            "signer_record"
+          ]
         },
         {
           "name": "multisig",
@@ -364,6 +368,47 @@
               {
                 "kind": "arg",
                 "path": "contract_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer_record",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  98,
+                  108,
+                  105,
+                  118,
+                  105,
+                  97,
+                  95,
+                  115,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  95,
+                  114,
+                  101,
+                  99,
+                  111,
+                  114,
+                  100
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "contract_hash"
+              },
+              {
+                "kind": "arg",
+                "path": "key_commitment"
               }
             ]
           }

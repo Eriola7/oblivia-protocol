@@ -38,4 +38,8 @@ async function prove(contract) {
   assert.notEqual(first[2], second[2]);
   assert.notEqual(first[3], second[3]);
   console.log('PASS: verified proofs are publicly bound to distinct full contract hashes');
-})().catch(error => { console.error(error); process.exitCode = 1; });
+})().catch(error => { console.error(error); process.exitCode = 1; })
+  .finally(async () => {
+    // ffjavascript caches its worker pool; release it so CI exits after tests.
+    if (globalThis.curve_bn128) await globalThis.curve_bn128.terminate();
+  });

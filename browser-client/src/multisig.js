@@ -59,7 +59,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
   const c = params.get('c');
   if (c) {
-    currentContract = decodeURIComponent(c);
+    // URLSearchParams has already decoded the value; preserve literal % text.
+    currentContract = c;
     currentHash = hashContract(currentContract);
     showSignMode();
   } else {
@@ -128,11 +129,15 @@ window.copyLink = function () {
 };
 
 window.captureBiometric = async function () {
+  const scanBtn = document.getElementById('scanBtn');
+  if (scanBtn.disabled) return;
+  scanBtn.disabled = true;
   const status = document.getElementById('bioStatus');
+  let stream;
   try {
     if (!detector) await loadDetector();
     status.textContent = 'Accessing camera...';
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
     const video = document.createElement('video');
     video.srcObject = stream; video.width = 640; video.height = 480;
     await video.play();
@@ -140,13 +145,21 @@ window.captureBiometric = async function () {
     await new Promise(r => setTimeout(r, 3000));
     const faces = await detector.estimateFaces(video);
     stream.getTracks().forEach(t => t.stop());
-    if (faces.length === 0) { status.textContent = 'No face detected. Try again.'; return; }
+    if (faces.length === 0) { status.textContent = 'No face detected. Try again.'; scanBtn.disabled = false; return; }
     biometricFeatures = extractFaceFeatures(faces[0]);
     biometricCaptured = true;
     status.textContent = 'Face captured \u2014 signing...';
     log('Face detected, key derived on-device', 'success');
     await doSign();
-  } catch (e) { log('Error: ' + e.message); status.textContent = 'Error. Try again.'; }
+  } catch (e) {
+    log('Error: ' + e.message);
+    status.textContent = 'Error. Try again.';
+    scanBtn.disabled = false;
+  } finally {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    biometricFeatures = null;
+    biometricCaptured = false;
+  }
 };
 
 async function doSign() {

@@ -1,6 +1,7 @@
 require('dotenv').config(); require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
+const { validateMultisigConfig, assertMultisigConfig } = require('./multisig_config');
 
 const PROGRAM_ID = new PublicKey('HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG');
 const REGISTRY_SEED = Buffer.from('oblivia_registry');
@@ -187,6 +188,7 @@ async function verifySignature(contractHash, keyCommitment, signatureCommitment)
 module.exports = { initializeRegistry, registerContract, submitSignature, verifySignature, createMultisig, submitMultisigSignature, finalizeMultisig };
 
 async function createMultisig(contractHash, threshold, maxSigners) {
+    validateMultisigConfig(threshold, maxSigners);
     const keypair = getKeypair();
     const provider = getProvider(keypair);
     const program = await getProgram(provider);
@@ -202,6 +204,7 @@ async function createMultisig(contractHash, threshold, maxSigners) {
 
     const existing = await connection.getAccountInfo(multisigPda);
     if (existing) {
+        assertMultisigConfig(await program.account.multiSigContract.fetch(multisigPda), threshold, maxSigners);
         console.log('MultiSig already exists:', multisigPda.toString());
         return { multisigPda, tx: null };
     }
@@ -296,7 +299,7 @@ async function submitVerifiedMultiSig(contractHash, proof) {
     const verify = await program.methods.verifyGroth16V2(proof.proofA, proof.proofB, proof.proofC, proof.publicInputs, Array.from(key), Array.from(sig))
         .accounts({ registry, contract, signature, signerRecord, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
     const record = await program.methods.recordVerifiedMultisig(Array.from(hash), Array.from(key))
-        .accounts({ registry, contract, multisig, multisigMember: member, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+        .accounts({ registry, contract, multisig, signerRecord, multisigMember: member, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
     return provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
 }
 
