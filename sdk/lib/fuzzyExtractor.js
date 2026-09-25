@@ -30,6 +30,10 @@ function featuresToBytes(corrected) {
     return new Uint8Array(corrected.map(v => v & 0xFF));
 }
 
+function bytesToHex(bytes) {
+    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 /**
  * Generate - derives a key R and helper string P from biometric input w
  * P is safe to store publicly - reveals nothing about w
@@ -46,12 +50,12 @@ function generate(features, salt = 'oblivia-v1') {
     combined.set(bytes);
     combined.set(saltBytes, bytes.length);
 
-    const key = Buffer.from(sha256(combined)).toString('hex');
+    const key = bytesToHex(sha256(combined));
 
     // Secure sketch: XOR of quantized and corrected values
     // Allows reconstruction from nearby input without revealing original
     const sketch = quantized.map((v, i) => v ^ corrected[i]);
-    const sketchHex = Buffer.from(sketch).toString('hex');
+    const sketchHex = bytesToHex(Uint8Array.from(sketch));
 
     return { key, sketch: sketchHex };
 }
@@ -77,7 +81,7 @@ function reproduce(features, sketchHex, salt = 'oblivia-v1') {
     combined.set(bytes);
     combined.set(saltBytes, bytes.length);
 
-    return Buffer.from(sha256(combined)).toString('hex');
+    return bytesToHex(sha256(combined));
 }
 
 /**

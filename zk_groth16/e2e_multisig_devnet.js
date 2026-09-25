@@ -26,10 +26,11 @@ async function main() {
   const create = await program.methods.createMultisig([...hash], 2, 2).accounts({ ...common, multisig }).instruction();
   const setup = await provider.sendAndConfirm(new Transaction().add(register, create));
 
-  async function countInstruction(key) {
+  async function countInstruction(key, signatureCommitment) {
     return program.methods.recordVerifiedMultisig([...hash], [...key]).accounts({
       ...common, multisig,
       signerRecord: pda(seed('oblivia_signer_record'), hash, key),
+      signature: pda(seed('oblivia_signature'), contract.toBuffer(), key, signatureCommitment),
       multisigMember: pda(seed('oblivia_multisig_member'), multisig.toBuffer(), key),
     }).instruction();
   }
@@ -43,7 +44,7 @@ async function main() {
     assert.ok((value.logs || []).some(line => line.includes(expectedLog)), JSON.stringify(value));
   }
   // Only simulate against this newly created test agreement. No attack is sent.
-  await expectRejected(await countInstruction(Buffer.alloc(32, 9)), 'AccountNotInitialized');
+  await expectRejected(await countInstruction(Buffer.alloc(32, 9), Buffer.alloc(32, 8)), 'AccountNotInitialized');
   assert.equal((await program.account.multiSigContract.fetch(multisig)).signaturesCollected, 0);
 
   const transactions = [];
@@ -61,7 +62,7 @@ async function main() {
       signature: pda(seed('oblivia_signature'), contract.toBuffer(), key, Buffer.from(args.signatureCommitment)),
       signerRecord: pda(seed('oblivia_signer_record'), hash, key),
     }).instruction();
-    const count = await countInstruction(key);
+    const count = await countInstruction(key, Buffer.from(args.signatureCommitment));
     transactions.push(await provider.sendAndConfirm(new Transaction().add(verify, count)));
     const state = await program.account.multiSigContract.fetch(multisig);
     assert.equal(state.signaturesCollected, i + 1);

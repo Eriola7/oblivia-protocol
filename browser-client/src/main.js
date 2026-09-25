@@ -33,6 +33,8 @@ function anchorProof(proof, signals) {
 let biometricCaptured = false;
 let biometricFeatures = null;
 let detector = null;
+let captureInProgress = false;
+let signingInProgress = false;
 
 function log(message, type = 'step') {
     const logEl = document.getElementById('log');
@@ -114,19 +116,28 @@ async function loadDetector() {
 }
 
 window.captureBiometric = async function() {
+    if (captureInProgress || signingInProgress) return;
+    captureInProgress = true;
     const box = document.getElementById('biometricBox');
     const status = document.getElementById('biometricStatus');
     const icon = document.getElementById('biometricIcon');
+    document.getElementById('signBtn').disabled = true;
+    biometricCaptured = false;
+    if (biometricFeatures) biometricFeatures.fill(0);
+    biometricFeatures = null;
+    box.classList.remove('active');
+    let stream;
+    let video;
     
     try {
         if (!detector) await loadDetector();
         
         status.textContent = 'Accessing camera...';
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        stream = await navigator.mediaDevices.getUserMedia({
             video: { width: 640, height: 480, facingMode: 'user' } 
         });
         
-        const video = document.createElement('video');
+        video = document.createElement('video');
         video.srcObject = stream;
         video.width = 640;
         video.height = 480;
@@ -159,49 +170,59 @@ window.captureBiometric = async function() {
     } catch(e) {
         log('Error: ' + e.message);
         status.textContent = 'Error. Try again.';
+    } finally {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        if (video) video.srcObject = null;
+        captureInProgress = false;
     }
 }
 
 window.signContract = async function() {
+    if (signingInProgress || captureInProgress) return;
     const contract = document.getElementById('contract').value;
     if (!contract) { log('Please enter contract text'); return; }
     if (!biometricCaptured) { log('Please capture biometric first'); return; }
-    
+
+    signingInProgress = true;
     document.getElementById('signBtn').disabled = true;
     document.getElementById('log').innerHTML = '';
     document.getElementById('result').classList.remove('show');
     document.getElementById('contractSignedDisplay').textContent = 'PENDING';
     document.getElementById('txDisplay').textContent = 'pending...';
-    
-    log('Deriving signing key from biometric...');
-    const signingKey = deriveKey(biometricFeatures);
-    log('Signing key derived — stored nowhere');
-    
-    log('Hashing contract...');
-    const contractBytes = new TextEncoder().encode(contract);
-    const contractHash = Array.from(sha256(contractBytes)).slice(0, 32);
-    log('Contract hash computed');
-    
-    log('Generating ZK proof... (this takes a moment)');
-    const [contract_hash_lo, contract_hash_hi] = contractHashLimbs(contractHash);
-    const input = {
-        contract_hash_lo, contract_hash_hi,
-        signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
-        timestamp: Date.now().toString()
-    };
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
-    const payload = anchorProof(proof, publicSignals);
-    log('Proof generated successfully', 'success');
-    log('Verifying proof...');
-    log('Proof verified', 'success');
-    const proofPreview = payload.proofA.slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('') + '...';
-    document.getElementById('proofDisplay').textContent = proofPreview;
+    document.getElementById('proofDisplay').textContent = 'not generated';
 
-    const keyCommitment = '0x' + Buffer.from(payload.keyCommitment).toString('hex');
-    const signatureCommitment = '0x' + Buffer.from(payload.signatureCommitment).toString('hex');
-
-    log('Submitting to Solana... (sponsored — free to you)');
+    let stage = 'preparation';
+    let signingKey;
+    let input;
     try {
+        log('Deriving signing key from biometric...');
+        signingKey = deriveKey(biometricFeatures);
+        log('Signing key derived — kept only in memory');
+
+        log('Hashing contract...');
+        const contractBytes = new TextEncoder().encode(contract);
+        const contractHash = Array.from(sha256(contractBytes)).slice(0, 32);
+        log('Contract hash computed');
+
+        stage = 'proof generation';
+        log('Generating ZK proof... (this takes a moment)');
+        const [contract_hash_lo, contract_hash_hi] = contractHashLimbs(contractHash);
+        input = {
+            contract_hash_lo, contract_hash_hi,
+            signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
+            timestamp: Date.now().toString()
+        };
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
+        const payload = anchorProof(proof, publicSignals);
+        log('Proof generated — awaiting on-chain verification', 'success');
+        const proofPreview = payload.proofA.slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('') + '...';
+        document.getElementById('proofDisplay').textContent = proofPreview;
+
+        const keyCommitment = '0x' + Buffer.from(payload.keyCommitment).toString('hex');
+        const signatureCommitment = '0x' + Buffer.from(payload.signatureCommitment).toString('hex');
+
+        stage = 'submission';
+        log('Submitting to Solana for verification... (sponsored — free to you)');
         const response = await fetch(RELAY_URL + '/sign', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -213,24 +234,37 @@ window.signContract = async function() {
             })
         });
         const data = await response.json();
-        if (data.error) {
-            log('Submission failed: ' + data.error);
-            document.getElementById('contractSignedDisplay').textContent = 'FALSE';
-            document.getElementById('txDisplay').textContent = 'not submitted — retry after resolving the relay error';
-        } else {
-            log('Signed on-chain — identity concealed', 'success');
-            document.getElementById('contractSignedDisplay').textContent = 'TRUE';
-            document.getElementById('txDisplay').innerHTML =
-                'Verified on-chain: <a href="' + data.explorer + '" target="_blank">' +
-                data.transaction.slice(0, 20) + '...</a>';
-            log('Done. Identity: concealed. Proof: on-chain.', 'success');
+        if (!response.ok || !data || data.error) {
+            throw new Error(data && data.error ? data.error : 'Relay returned an unsuccessful response');
         }
+        if (typeof data.transaction !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(data.transaction)) {
+            throw new Error('Relay did not return a valid transaction signature');
+        }
+        const txDisplay = document.getElementById('txDisplay');
+        const link = document.createElement('a');
+        link.href = 'https://explorer.solana.com/tx/' + data.transaction + '?cluster=devnet';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = data.transaction.slice(0, 20) + '...';
+        txDisplay.textContent = 'Verified on-chain: ';
+        txDisplay.appendChild(link);
+        log('Signed on-chain — identity concealed', 'success');
+        document.getElementById('contractSignedDisplay').textContent = 'TRUE';
+        log('Done. Identity: concealed. Proof: on-chain.', 'success');
     } catch (e) {
-        log('Relay error: ' + e.message);
-        document.getElementById('contractSignedDisplay').textContent = 'FALSE';
-        document.getElementById('txDisplay').textContent = 'not submitted — retry after resolving the relay error';
+        log('Failed during ' + stage + ': ' + e.message);
+        const submitted = stage === 'submission';
+        document.getElementById('contractSignedDisplay').textContent = submitted ? 'UNCONFIRMED' : 'FALSE';
+        document.getElementById('txDisplay').textContent = submitted
+            ? 'confirmation unavailable — check transaction status before retrying'
+            : 'not submitted — resolve the error and retry';
+    } finally {
+        // Release witness references; JavaScript cannot guarantee zeroization of strings.
+        if (input) input.signer_key = '0';
+        input = null;
+        signingKey = null;
+        signingInProgress = false;
+        document.getElementById('result').classList.add('show');
+        document.getElementById('signBtn').disabled = false;
     }
-
-    document.getElementById('result').classList.add('show');
-    document.getElementById('signBtn').disabled = false;
 }

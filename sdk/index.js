@@ -43,7 +43,7 @@ function deriveKey(biometricFeatures) {
  * 
  * @param {number[]} biometricFeatures - Array of 20 facial geometry ratios
  * @param {string} contractData - The contract content to sign
- * @returns {{ proof, keyCommitment, signatureCommitment, contractHash }}
+ * @returns {Promise<{ proofA: number[], proofB: number[], proofC: number[], publicInputs: number[], keyCommitment: number[], signatureCommitment: number[], contractHash: number[] }>}
  */
 async function generateProof(biometricFeatures, contractData) {
     const { key: signingKeyHex } = generate(biometricFeatures);
@@ -59,8 +59,8 @@ async function generateProof(biometricFeatures, contractData) {
  * @returns {{ verified, keyCommitment, signatureCommitment, contractHash }}
  */
 async function signContract(biometricFeatures, contractData) {
-    const { proof, keyCommitment, signatureCommitment, contractHash } = 
-        await generateProof(biometricFeatures, contractData);
+    const proof = await generateProof(biometricFeatures, contractData);
+    const { keyCommitment, signatureCommitment, contractHash } = proof;
 
     await registerContract(contractHash);
     await submitVerifiedGroth16(contractHash, proof);
@@ -96,8 +96,8 @@ async function createMultiSigContract(contractData, threshold, maxSigners) {
  * @param {string} contractData - The contract content to sign
  */
 async function signMultiSig(biometricFeatures, contractData) {
-    const { proof, keyCommitment, signatureCommitment, contractHash } =
-        await generateProof(biometricFeatures, contractData);
+    const proof = await generateProof(biometricFeatures, contractData);
+    const { keyCommitment, signatureCommitment, contractHash } = proof;
 
     await submitVerifiedMultiSig(contractHash, proof);
 

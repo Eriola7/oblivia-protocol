@@ -336,7 +336,8 @@
           },
           "relations": [
             "multisig",
-            "signer_record"
+            "signer_record",
+            "signature"
           ]
         },
         {
@@ -412,6 +413,9 @@
               }
             ]
           }
+        },
+        {
+          "name": "signature"
         },
         {
           "name": "multisig_member",

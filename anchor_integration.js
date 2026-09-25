@@ -228,7 +228,7 @@ async function submitVerifiedMultiSig(contractHash, anchorProof) {
         Array.from(key), Array.from(signatureCommitment),
     ).accounts({ registry, contract, signature, signerRecord, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
     const record = await program.methods.recordVerifiedMultisig(Array.from(hash), Array.from(key))
-        .accounts({ registry, contract, multisig, signerRecord, multisigMember, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+        .accounts({ registry, contract, multisig, signerRecord, signature, multisigMember, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
     return provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
 }
 

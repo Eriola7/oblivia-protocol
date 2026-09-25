@@ -299,7 +299,7 @@ async function submitVerifiedMultiSig(contractHash, proof) {
     const verify = await program.methods.verifyGroth16V2(proof.proofA, proof.proofB, proof.proofC, proof.publicInputs, Array.from(key), Array.from(sig))
         .accounts({ registry, contract, signature, signerRecord, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
     const record = await program.methods.recordVerifiedMultisig(Array.from(hash), Array.from(key))
-        .accounts({ registry, contract, multisig, signerRecord, multisigMember: member, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
+        .accounts({ registry, contract, multisig, signerRecord, signature, multisigMember: member, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
     return provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
 }
 

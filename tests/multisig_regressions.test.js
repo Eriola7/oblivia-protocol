@@ -40,7 +40,7 @@ test('actual browser share-link handler preserves exact contract bytes', async (
 });
 
 for (const file of ['anchor_integration.js', 'sdk/lib/anchor_integration.js']) {
-    test(file + ' passes verified signer record and rejects existing config conflicts', async () => {
+    test(file + ' passes verified signer record and signature and rejects existing config conflicts', async () => {
         const filename = path.join(root, file);
         const nativeRequire = createRequire(filename);
         const calls = [];
@@ -60,10 +60,18 @@ for (const file of ['anchor_integration.js', 'sdk/lib/anchor_integration.js']) {
         assert.equal(calls[0].name, 'verify');
         assert.equal(calls[1].name, 'record');
         assert.equal(calls[0].accounts.signerRecord.toBase58(), calls[1].accounts.signerRecord.toBase58());
+        assert.equal(calls[0].accounts.signature.toBase58(), calls[1].accounts.signature.toBase58());
+        const { PublicKey } = require('@solana/web3.js');
+        const programId = new PublicKey(require('../sdk/lib/idl.json').address);
+        const expectedSignature = PublicKey.findProgramAddressSync([
+            Buffer.from('oblivia_signature'), calls[0].accounts.contract.toBuffer(),
+            Buffer.alloc(32, 2), Buffer.alloc(32, 3),
+        ], programId)[0];
+        assert.equal(calls[1].accounts.signature.toBase58(), expectedSignature.toBase58());
     });
 }
 
-test('published IDL requires a read-only verified signer record', () => {
+test('published IDL requires a read-only signer record and contract-bound signature', () => {
     const idl = require('../sdk/lib/idl.json');
     const generated = path.join(root, 'oblivia-contracts/target/idl/oblivia_contracts.json');
     if (fs.existsSync(generated)) assert.deepEqual(idl, JSON.parse(fs.readFileSync(generated, 'utf8')));
@@ -73,6 +81,12 @@ test('published IDL requires a read-only verified signer record', () => {
     assert.equal(account.writable, undefined);
     assert.equal(Buffer.from(account.pda.seeds[0].value).toString(), 'oblivia_signer_record');
     assert.deepEqual(account.pda.seeds.slice(1), [{ kind: 'arg', path: 'contract_hash' }, { kind: 'arg', path: 'key_commitment' }]);
+    const signature = record.accounts.find(a => a.name === 'signature');
+    assert.ok(signature);
+    assert.equal(signature.writable, undefined);
+    // Anchor omits auto-resolution metadata for this self-referential PDA seed.
+    // Clients supply it explicitly; the compiled program tests enforce its seeds.
+    assert.ok(record.accounts.find(a => a.name === 'contract').relations.includes('signature'));
 });
 
 test('relay refuses conflicting settings and passes the proof record to counting', async () => {
@@ -111,6 +125,7 @@ test('relay refuses conflicting settings and passes the proof record to counting
     assert.equal(response.error, undefined);
     assert.equal(calls.length, 2);
     assert.equal(calls[0].accounts.signerRecord.toBase58(), calls[1].accounts.signerRecord.toBase58());
+    assert.equal(calls[0].accounts.signature.toBase58(), calls[1].accounts.signature.toBase58());
 });
 
 test('browser prevents overlapping scans and allows retry after model failure', async () => {

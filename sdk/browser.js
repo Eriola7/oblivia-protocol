@@ -42,7 +42,8 @@ async function generateProof(biometricFeatures, contractData, provingAssets) {
     const signingKey = deriveKey(biometricFeatures);
     const contractHash = await hashContract(contractData);
     const input = {
-        signer_key: BigInt('0x' + signingKey).toString(),
+        // Match the Node SDK and reference clients' 128-bit signing scalar.
+        signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
         contract_hash_lo: toField(contractHash.slice(0, 16)),
         contract_hash_hi: toField(contractHash.slice(16, 32)),
         timestamp: Date.now().toString()
