@@ -10,6 +10,7 @@ const root = path.join(__dirname, '..');
 const sdkRequire = createRequire(path.join(root, 'sdk/index.js'));
 const features = Array(20).fill(0.5);
 const contract = 'SDK regression: Pay 10% — agreement 📝';
+const transaction = '2'.repeat(88);
 
 // Load the real public entry points with only their network boundary replaced.
 // Browser modules intentionally have no Buffer global or polyfill.
@@ -50,6 +51,7 @@ for (const method of ['signContract', 'signMultiSig']) {
             assert.strictEqual(submitted, proof);
             assert.strictEqual(hash, proof.contractHash);
             calls.push('submit');
+            return transaction;
         };
         const sdk = loadModule('sdk/index.js', {
             './lib/groth16_intent': {
@@ -73,7 +75,12 @@ for (const method of ['signContract', 'signMultiSig']) {
         assert.deepEqual(calls, method === 'signContract' ? ['prove', 'register', 'submit'] : ['prove', 'submit']);
         assert.strictEqual(result.keyCommitment, proof.keyCommitment);
         assert.strictEqual(result.signatureCommitment, proof.signatureCommitment);
-        if (method === 'signContract') assert.equal(result.verified, true);
+        assert.equal(result.verified, true);
+        assert.equal(result.transaction, transaction);
+        assert.strictEqual(result.contractHash, proof.contractHash);
+        assert.equal(result.identityRevealed, false);
+        assert.equal(result.dataTransmitted, false);
+        assert.equal(result.state, undefined, 'the submission API does not promise a separate status fetch');
     });
 
     test(`public SDK ${method} propagates proof and submission failures`, async () => {
@@ -121,6 +128,93 @@ test('browser fuzzy extractor works without Buffer and preserves key/sketch enco
         assert.equal(actual.key.length, 64);
         assert.equal(actual.sketch.length, 40);
         assert.equal(browserExtractor.reproduce(input, actual.sketch), expected.key);
+    }
+});
+
+test('Node deriveKey returns its documented hex key and sketch object', () => {
+    const sdk = loadModule('sdk/index.js', { './lib/anchor_integration': {} });
+    const { key, sketch } = sdk.deriveKey(features);
+    assert.match(key, /^[0-9a-f]{64}$/);
+    assert.match(sketch, /^[0-9a-f]{40}$/);
+    assert.equal(sdkRequire('./lib/fuzzyExtractor').reproduce(features, sketch), key);
+});
+
+test('SDK rejects invalid multisig settings and contract data before registration', async () => {
+    const calls = [];
+    const sdk = loadModule('sdk/index.js', {
+        './lib/anchor_integration': {
+            registerContract: async () => { calls.push('register'); },
+            createMultisig: async () => { calls.push('create'); },
+        },
+    });
+    for (const args of [[0, 3], [2.5, 3], [2, 1], [1, 256], ['2', 3]]) {
+        await assert.rejects(sdk.createMultiSigContract(contract, ...args), /integer values/);
+    }
+    await assert.rejects(sdk.createMultiSigContract({ text: contract }, 2, 3), /string or Uint8Array/);
+    assert.deepEqual(calls, []);
+});
+
+test('SDK creation preserves the address, receipt, settings and exact string or binary hash', async () => {
+    for (const contractData of [contract, Uint8Array.from([0, 255, 128, 1])]) {
+        for (const tx of [transaction, null]) {
+            const hashes = [];
+            const sdk = loadModule('sdk/index.js', {
+                './lib/anchor_integration': {
+                    registerContract: async hash => { hashes.push(Array.from(hash)); },
+                    createMultisig: async (hash, threshold, maxSigners) => {
+                        hashes.push(Array.from(hash));
+                        assert.equal(threshold, 2);
+                        assert.equal(maxSigners, 3);
+                        return { multisigPda: { toString: () => 'test-multisig-address' }, tx };
+                    },
+                },
+            });
+            const result = await sdk.createMultiSigContract(contractData, 2, 3);
+            const expected = Array.from(crypto.createHash('sha256').update(contractData).digest());
+            assert.deepEqual(hashes, [expected, expected]);
+            assert.deepEqual(Array.from(result.contractHash), expected);
+            assert.equal(result.multisigAddress, 'test-multisig-address');
+            assert.equal(result.transaction, tx);
+            assert.equal(result.threshold, 2);
+            assert.equal(result.maxSigners, 3);
+        }
+    }
+});
+
+test('SDK finalization preserves both real and already-finalized receipts', async () => {
+    for (const tx of [transaction, null]) {
+        const sdk = loadModule('sdk/index.js', {
+            './lib/anchor_integration': { finalizeMultisig: async hash => {
+                assert.equal(hash.length, 32);
+                return tx;
+            } },
+        });
+        const result = await sdk.finalizeMultiSigContract(new Uint8Array([0, 255]));
+        assert.equal(result.finalized, true);
+        assert.equal(result.identityRevealed, false);
+        assert.equal(result.transaction, tx);
+    }
+});
+
+test('one-shot proof CLI releases cached workers on success and failure', async () => {
+    const source = fs.readFileSync(path.join(root, 'sdk/scripts/check-proof.js'), 'utf8');
+    for (const failure of [false, true]) {
+        let terminated = 0;
+        const process = {};
+        const messages = [];
+        const context = vm.createContext({
+            require: () => ({ generateIntentProof: async () => {
+                if (failure) throw new Error('proving unavailable');
+                return { publicInputs: Array(128).fill(0) };
+            } }),
+            curve_bn128: { terminate: async () => { terminated++; } },
+            process,
+            console: { log: text => messages.push(text), error: text => messages.push(text) },
+        });
+        await vm.runInContext(source, context);
+        assert.equal(terminated, 1);
+        assert.equal(process.exitCode, failure ? 1 : undefined);
+        assert.match(messages.join('\n'), failure ? /proving unavailable/ : /PASS/);
     }
 });
 

@@ -281,6 +281,10 @@ async function finalizeMultisig(contractHash) {
     const [contractPda] = PublicKey.findProgramAddressSync(
         [CONTRACT_SEED, contractHashBytes], PROGRAM_ID
     );
+    // The threshold signature normally finalized this agreement already.
+    const existing = await program.account.multiSigContract.fetch(multisigPda);
+    if (existing.finalized) return null;
+
     const tx = await program.methods
         .finalizeMultisig(Array.from(contractHashBytes))
         .accounts({ contract: contractPda, multisig: multisigPda })

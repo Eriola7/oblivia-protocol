@@ -101,6 +101,14 @@ app.post('/sign', limitSponsoredRequest, async (req, res) => {
         const keyCommitmentBytes = parseHex32(keyCommitment, 'keyCommitment');
         const sigCommitmentBytes = parseHex32(signatureCommitment, 'signatureCommitment');
 
+        // Reject malformed proof fields before creating accounts or spending rent.
+        const validatedProof = [
+            parseByteArray(proofA, 64, 'proofA'),
+            parseByteArray(proofB, 128, 'proofB'),
+            parseByteArray(proofC, 64, 'proofC'),
+            parseByteArray(publicInputs, 128, 'publicInputs'),
+        ];
+
         const { program, keypair } = getProgram();
 
         const [registryPda] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
@@ -129,10 +137,7 @@ app.post('/sign', limitSponsoredRequest, async (req, res) => {
         // proof's public contract limbs and commitments match these arguments.
         const tx = await program.methods
             .verifyGroth16V2(
-                parseByteArray(proofA, 64, 'proofA'),
-                parseByteArray(proofB, 128, 'proofB'),
-                parseByteArray(proofC, 64, 'proofC'),
-                parseByteArray(publicInputs, 128, 'publicInputs'),
+                ...validatedProof,
                 Array.from(keyCommitmentBytes), Array.from(sigCommitmentBytes),
             )
             .accounts({
@@ -213,8 +218,15 @@ app.post('/multisig/sign', limitSponsoredRequest, async (req, res) => {
             .accounts({ registry: registryPda, contract: contractPda, multisig: multisigPda, signerRecord: PublicKey.findProgramAddressSync([Buffer.from('oblivia_signer_record'), contractHashBytes, keyCommitmentBytes], PROGRAM_ID)[0], signature: signaturePda, multisigMember: memberPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).instruction();
         const tx = await program.provider.sendAndConfirm(new anchor.web3.Transaction().add(verify, record), [keypair]);
 
-        const ms = await program.account.multiSigContract.fetch(multisigPda);
-        res.json({ transaction: tx, collected: ms.signaturesCollected, threshold: ms.threshold, finalized: ms.finalized, explorer: 'https://explorer.solana.com/tx/' + tx + '?cluster=devnet' });
+        const receipt = { transaction: tx, explorer: 'https://explorer.solana.com/tx/' + tx + '?cluster=devnet' };
+        try {
+            const ms = await program.account.multiSigContract.fetch(multisigPda);
+            res.json({ ...receipt, collected: ms.signaturesCollected, threshold: ms.threshold, finalized: ms.finalized });
+        } catch (_) {
+            // The transaction is confirmed even if this optional state read fails.
+            // Preserve its receipt so the client does not invite a duplicate retry.
+            res.json({ ...receipt, statusUnavailable: true });
+        }
     } catch (e) { res.json({ error: e.message }); }
 });
 

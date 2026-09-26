@@ -29,8 +29,8 @@ test('actual browser share-link handler preserves exact contract bytes', async (
             },
             URLSearchParams, TextEncoder, Uint8Array, Buffer,
             window: { location: { search: '?c=' + encodeURIComponent(contract) }, addEventListener: (_, fn) => { loaded = fn; } },
-            document: { getElementById(id) { if (!elements.has(id)) elements.set(id, { style: {} }); return elements.get(id); } },
-            fetch: async () => ({ json: async () => ({ collected: 0, threshold: 2, finalized: false }) }),
+            document: { getElementById(id) { if (!elements.has(id)) elements.set(id, { style: {}, addEventListener() {} }); return elements.get(id); } },
+            fetch: async () => ({ ok: true, json: async () => ({ collected: 0, threshold: 2, finalized: false }) }),
         });
         vm.runInContext(fs.readFileSync(path.join(root, 'browser-client/src/multisig.js'), 'utf8'), context);
         loaded();
@@ -40,6 +40,26 @@ test('actual browser share-link handler preserves exact contract bytes', async (
 });
 
 for (const file of ['anchor_integration.js', 'sdk/lib/anchor_integration.js']) {
+    test(file + ' finalization does not send another transaction after automatic finalization', async () => {
+        const filename = path.join(root, file);
+        const nativeRequire = createRequire(filename);
+        const payer = require('@solana/web3.js').Keypair.generate();
+        let finalized = true;
+        let sent = 0;
+        const program = {
+            account: { multiSigContract: { fetch: async () => ({ finalized }) } },
+            methods: { finalizeMultisig: () => ({ accounts: () => ({ rpc: async () => { sent++; return 'finalize-transaction'; } }) }) },
+        };
+        const context = vm.createContext({ require: name => name === 'dotenv' ? { config() {} } : nativeRequire(name), module: { exports: {} }, __dirname: path.dirname(filename), Buffer, process: { env: {} }, console: { log() {} }, payer, program });
+        vm.runInContext(fs.readFileSync(filename, 'utf8'), context);
+        vm.runInContext('getKeypair = () => payer; getProvider = () => ({}); getProgram = async () => program;', context);
+        assert.equal(await context.module.exports.finalizeMultisig(Array(32).fill(1)), null);
+        assert.equal(sent, 0);
+        finalized = false;
+        assert.equal(await context.module.exports.finalizeMultisig(Array(32).fill(1)), 'finalize-transaction');
+        assert.equal(sent, 1);
+    });
+
     test(file + ' passes verified signer record and signature and rejects existing config conflicts', async () => {
         const filename = path.join(root, file);
         const nativeRequire = createRequire(filename);

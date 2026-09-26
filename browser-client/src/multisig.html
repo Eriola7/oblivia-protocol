@@ -63,11 +63,11 @@
       <div class="row">
         <div>
           <label>Signatures required</label>
-          <input type="number" id="threshold" value="2" min="1" max="10">
+          <input type="number" id="threshold" value="2" min="1" max="255" step="1">
         </div>
         <div>
           <label>Total signers</label>
-          <input type="number" id="maxSigners" value="3" min="1" max="10">
+          <input type="number" id="maxSigners" value="3" min="1" max="255" step="1">
         </div>
       </div>
       <button id="createBtn" onclick="createMultisig()">Create Agreement</button>
@@ -90,6 +90,5 @@
 
     <div class="log" id="log"></div>
   </div>
-  <script src="multisig.js"></script>
 </body>
 </html>

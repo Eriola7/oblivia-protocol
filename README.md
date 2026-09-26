@@ -12,7 +12,7 @@ No biometric sample is submitted to the protocol. The biometric client derives a
 
 The reference browser's 20 quantized feature bytes each have only four possible values (at most 40 bits before hashing, potentially less in practice). Hashing does not increase this entropy. It is a demonstration input, not a production biometric credential. Multisig deduplicates **key commitments**, not people: it provides neither biometric uniqueness/liveness nor an authorized participant list. Repeated scans can produce different keys.
 
-**Devnet proof-gate upgrade:** deployed on September 21, 2026, at slot `501813926`. The matching relay/SDK must supply the verified signer record when counting a multisig member. Single-signature verification is unchanged. This correctness fix is not a production security certification.
+**Devnet proof-receipt upgrade:** deployed on September 26, 2026, at slot `504178380`. The matching relay/SDK must supply both the signer record and the verified contract-bound signature receipt when counting a multisig member. Single-signature verification is unchanged. This correctness fix is not a production security certification.
 
 ## Current architecture
 
@@ -57,6 +57,8 @@ The same Groth16 relation is proven by the client and verified by the on-chain p
 
 `zk_intent_circuit/` is retained as a historical Noir experiment. It is not used by the deployed verifier, relay, reference client, or current SDK flow.
 
+The root `multisig_demo.js` and `witness_node.js` are also historical experiments, not supported v2 examples. The former uses the disabled commitment-only path; the latter is not a verified witness service. Use the current reference clients and SDK examples instead.
+
 ## Local verification
 
 ```bash
@@ -78,7 +80,7 @@ The current v2 entrypoints are:
 
 Older commitment-only submission instructions are retained only for compatibility and fail closed. New integrations must use the v2 path.
 
-The patched multisig counter requires a program-owned `SignerRecord` PDA for the exact contract hash and key commitment. The relay submits verification and counting atomically; an existing verified record may also be counted later, but only once. The local VM tests exercise missing/forged/mismatched records, duplicate counting, threshold finalization, a real development proof, and invalid-proof rollback.
+The patched multisig counter requires a program-owned `SignerRecord` PDA and a verified `ObliviaSignature` receipt for the exact contract and key commitment. The relay submits verification and counting atomically. The low-level `record_verified_multisig` instruction can also count an existing verified receipt later, but only once; the current relay/SDK signing helpers always submit a fresh verification and therefore cannot reuse a key that has already signed that contract singly. The local VM tests exercise missing/forged/mismatched records and receipts, duplicate counting, threshold finalization, a real development proof, and invalid-proof rollback.
 
 A live Devnet 2-of-2 release check accepted two fresh proofs and finalized the agreement. Read-only simulations against that test agreement rejected an unverified count and a duplicate count. [Final threshold transaction](https://explorer.solana.com/tx/2hjZ1JS93XP3DngYWpavasaY2qY1oBsspF7NxKSc9phNX2YZi5RH8N3zHQZ6Z87HvDWhdG3Ba5SV59z37QLm7rkP?cluster=devnet). Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
 

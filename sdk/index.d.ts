@@ -2,21 +2,24 @@
  * Oblivia SDK — Zero-identity contract signing for Solana.
  * MIT licensed. Free forever.
  */
+import type { PublicKey } from '@solana/web3.js';
 
 /** Result of a full contract signing pipeline. */
 export interface SignResult {
   /** True if the signature was verified on-chain. */
-  verified: boolean;
+  verified: true;
   /** Always false — identity is never revealed. */
   identityRevealed: false;
   /** Always false — biometric data never leaves the device. */
   dataTransmitted: false;
-  /** Transaction signature of the on-chain submission, if applicable. */
-  transaction?: string;
-  /** Hex-encoded key commitment (Pedersen hash of signing key). */
-  keyCommitment?: string;
-  /** Hex-encoded signature commitment (binds key, contract hash, timestamp). */
-  signatureCommitment?: string;
+  /** Confirmed transaction signature of the on-chain submission. */
+  transaction: string;
+  /** SHA-256 contract hash, encoded as 32 bytes. */
+  contractHash: number[];
+  /** Key commitment, encoded as 32 bytes. */
+  keyCommitment: number[];
+  /** Signature commitment, encoded as 32 bytes. */
+  signatureCommitment: number[];
 }
 
 /** Result of ZK proof generation. */
@@ -44,12 +47,13 @@ export interface MultiSigState {
 }
 
 /**
- * Derive a stable cryptographic signing key from biometric features.
+ * Derive a prototype signing key from biometric features.
  * Runs entirely on-device. No data is transmitted or stored.
  * @param biometricFeatures - Array of normalized biometric measurements (e.g. facial geometry ratios).
- * @returns Hex-encoded signing key.
+ * Stability, biometric entropy, and uniqueness are not established guarantees.
+ * @returns Hex-encoded signing key and reconstruction sketch.
  */
-export function deriveKey(biometricFeatures: number[]): string;
+export function deriveKey(biometricFeatures: number[]): { key: string; sketch: string };
 
 /**
  * Generate a zero-knowledge proof of contract signing.
@@ -84,7 +88,14 @@ export function createMultiSigContract(
   contractData: string | Uint8Array,
   threshold: number,
   maxSigners: number
-): Promise<{ multisigAddress: string; transaction: string }>;
+): Promise<{
+  contractHash: number[];
+  threshold: number;
+  maxSigners: number;
+  multisigAddress: string;
+  /** Null when the same agreement configuration already exists. */
+  transaction: string | null;
+}>;
 
 /**
  * Sign a multi-signature contract as one of N anonymous signers.
@@ -95,13 +106,17 @@ export function createMultiSigContract(
 export function signMultiSig(
   biometricFeatures: number[],
   contractData: string | Uint8Array
-): Promise<SignResult & { state: MultiSigState }>;
+): Promise<SignResult>;
 
 /**
  * Finalize a multi-signature contract once the threshold is reached.
- * Fails on-chain if the threshold has not been met.
+ * Normally unnecessary: signing auto-finalizes at the threshold.
+ * Returns a null transaction if already finalized; fails if below threshold.
  * @param contractData - The contract to finalize.
  */
 export function finalizeMultiSigContract(
   contractData: string | Uint8Array
-): Promise<{ finalized: boolean; transaction: string }>;
+): Promise<{ finalized: true; identityRevealed: false; transaction: string | null }>;
+
+/** One-time registry initialization; already performed on Devnet. */
+export function initializeRegistry(): Promise<PublicKey>;

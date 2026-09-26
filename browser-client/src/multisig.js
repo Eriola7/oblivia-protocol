@@ -2,6 +2,7 @@ const { sha256 } = require('@noble/hashes/sha2.js');
 const snarkjs = require('snarkjs');
 const tf = require('@tensorflow/tfjs');
 const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
+const { validateMultisigConfig } = require('../../sdk/lib/multisig_config');
 
 const RELAY_URL = 'https://oblivia-relay.onrender.com';
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
@@ -16,6 +17,51 @@ let biometricFeatures = null;
 let detector = null;
 let currentContract = null;
 let currentHash = null;
+let creatingInProgress = false;
+let signingInProgress = false;
+
+async function relayResponse(response) {
+  const data = await response.json();
+  if (!response.ok || !data || typeof data !== 'object' || Array.isArray(data) || data.error) {
+    throw new Error(data && data.error ? data.error : 'Relay returned an unsuccessful response');
+  }
+  return data;
+}
+
+function validateTransaction(transaction) {
+  if (typeof transaction !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(transaction)) {
+    throw new Error('Relay did not return a valid transaction signature');
+  }
+}
+
+function validateStatus(status, minimumCollected = 0) {
+  if (!Number.isInteger(status.threshold) || status.threshold < 1 || status.threshold > 255 ||
+      !Number.isInteger(status.collected) || status.collected < minimumCollected || status.collected > status.threshold ||
+      typeof status.finalized !== 'boolean' || status.finalized !== (status.collected >= status.threshold)) {
+    throw new Error('Relay returned invalid agreement status');
+  }
+}
+
+function renderStatus(status) {
+  document.getElementById('progress').textContent =
+    status.collected + ' of ' + status.threshold + ' signed' + (status.finalized ? ' — FINALIZED ✓' : '');
+  if (status.finalized) {
+    document.getElementById('scanBtn').disabled = true;
+    document.getElementById('scanBtn').textContent = 'Agreement Finalized';
+  }
+}
+
+function showTransaction(transaction) {
+  const txEl = document.getElementById('txLink');
+  const link = document.createElement('a');
+  link.href = 'https://explorer.solana.com/tx/' + transaction + '?cluster=devnet';
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = transaction.slice(0, 20) + '...';
+  txEl.textContent = 'On-chain transaction: ';
+  txEl.appendChild(link);
+  txEl.style.display = 'block';
+}
 
 function log(msg, type = 'step') {
   const el = document.getElementById('log');
@@ -56,6 +102,11 @@ function hashContract(text) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  for (const id of ['contractInput', 'threshold', 'maxSigners']) {
+    document.getElementById(id).addEventListener('input', () => {
+      if (!creatingInProgress) document.getElementById('shareBox').style.display = 'none';
+    });
+  }
   const params = new URLSearchParams(window.location.search);
   const c = params.get('c');
   if (c) {
@@ -83,28 +134,29 @@ async function showSignMode() {
 async function refreshStatus() {
   try {
     const res = await fetch(RELAY_URL + '/multisig/status/' + encodeURIComponent(JSON.stringify(currentHash)));
-    const s = await res.json();
-    if (s.error || s.exists === false) {
-      document.getElementById('progress').textContent = 'Multisig not found';
-      return;
-    }
-    document.getElementById('progress').textContent =
-      s.collected + ' of ' + s.threshold + ' signed' + (s.finalized ? ' \u2014 FINALIZED \u2713' : '');
-    if (s.finalized) {
-      document.getElementById('scanBtn').disabled = true;
-      document.getElementById('scanBtn').textContent = 'Agreement Finalized';
-    }
-  } catch (e) { log('Status error: ' + e.message); }
+    const s = await relayResponse(res);
+    if (s.exists === false) throw new Error('Multisig not found');
+    validateStatus(s);
+    renderStatus(s);
+  } catch (e) {
+    document.getElementById('progress').textContent = 'Agreement status unavailable';
+    log('Status error: ' + e.message);
+  }
 }
 
 window.createMultisig = async function () {
+  if (creatingInProgress) return;
   const contract = document.getElementById('contractInput').value;
-  const threshold = parseInt(document.getElementById('threshold').value);
-  const maxSigners = parseInt(document.getElementById('maxSigners').value);
+  const threshold = Number(document.getElementById('threshold').value);
+  const maxSigners = Number(document.getElementById('maxSigners').value);
   if (!contract) { log('Enter contract text'); return; }
-  if (threshold > maxSigners) { log('Threshold cannot exceed max signers'); return; }
+  try { validateMultisigConfig(threshold, maxSigners); }
+  catch (e) { log(e.message); return; }
 
+  creatingInProgress = true;
   document.getElementById('createBtn').disabled = true;
+  for (const id of ['contractInput', 'threshold', 'maxSigners']) document.getElementById(id).disabled = true;
+  document.getElementById('shareBox').style.display = 'none';
   log('Creating multisig on Solana... (sponsored)');
   const hash = hashContract(contract);
   try {
@@ -112,13 +164,21 @@ window.createMultisig = async function () {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contractHash: hash, threshold, maxSigners })
     });
-    const data = await res.json();
-    if (data.error) { log('Failed: ' + data.error); document.getElementById('createBtn').disabled = false; return; }
-    log('Multisig created on-chain', 'success');
+    const data = await relayResponse(res);
+    if (typeof data.multisig !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(data.multisig)) {
+      throw new Error('Relay did not return a valid agreement address');
+    }
+    if (data.alreadyExists !== true) validateTransaction(data.transaction);
+    log(data.alreadyExists === true ? 'Matching multisig already exists on-chain' : 'Multisig created on-chain', 'success');
     const link = window.location.origin + window.location.pathname + '?c=' + encodeURIComponent(contract);
     document.getElementById('shareLink').value = link;
     document.getElementById('shareBox').style.display = 'block';
-  } catch (e) { log('Error: ' + e.message); document.getElementById('createBtn').disabled = false; }
+  } catch (e) { log('Creation unconfirmed: ' + e.message); }
+  finally {
+    creatingInProgress = false;
+    document.getElementById('createBtn').disabled = false;
+    for (const id of ['contractInput', 'threshold', 'maxSigners']) document.getElementById(id).disabled = false;
+  }
 };
 
 window.copyLink = function () {
@@ -163,40 +223,64 @@ window.captureBiometric = async function () {
 };
 
 async function doSign() {
+  if (signingInProgress) return;
   if (!biometricCaptured) { log('Capture your face first'); return; }
   const scanBtn = document.getElementById('scanBtn');
   if (scanBtn) scanBtn.disabled = true;
-  log('Deriving key...');
-  const signingKey = deriveKey(biometricFeatures);
-  log('Generating ZK proof... (takes a moment)');
-  const hex = currentHash.map(b => b.toString(16).padStart(2, '0')).join('');
-  const input = { contract_hash_lo: BigInt('0x' + hex.slice(0, 32)).toString(), contract_hash_hi: BigInt('0x' + hex.slice(32)).toString(), signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(), timestamp: Date.now().toString() };
-  const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
-  const payload = grothPayload(proof, publicSignals);
-  log('Proof generated', 'success');
-  const keyCommitment = '0x' + Buffer.from(payload.keyCommitment).toString('hex');
-  const signatureCommitment = '0x' + Buffer.from(payload.signatureCommitment).toString('hex');
-  log('Submitting to Solana... (sponsored)');
+  signingInProgress = true;
+  let signingKey;
+  let input;
+  let transaction;
+  let submitting = false;
   try {
+    log('Deriving key...');
+    signingKey = deriveKey(biometricFeatures);
+    log('Generating ZK proof... (takes a moment)');
+    const hex = currentHash.map(b => b.toString(16).padStart(2, '0')).join('');
+    input = { contract_hash_lo: BigInt('0x' + hex.slice(0, 32)).toString(), contract_hash_hi: BigInt('0x' + hex.slice(32)).toString(), signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(), timestamp: Date.now().toString() };
+    const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
+    const payload = grothPayload(proof, publicSignals);
+    log('Proof generated — awaiting on-chain verification');
+    const keyCommitment = '0x' + Buffer.from(payload.keyCommitment).toString('hex');
+    const signatureCommitment = '0x' + Buffer.from(payload.signatureCommitment).toString('hex');
+    submitting = true;
+    log('Submitting to Solana... (sponsored)');
     const res = await fetch(RELAY_URL + '/multisig/sign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contractHash: currentHash, keyCommitment, signatureCommitment, proofA: payload.proofA, proofB: payload.proofB, proofC: payload.proofC, publicInputs: payload.publicInputs })
     });
-    const data = await res.json();
-    if (data.error) { log('Failed: ' + data.error); document.getElementById('scanBtn').disabled = false; return; }
-    log('Signed on-chain \u2014 identity concealed', 'success');
-    if (data.explorer) {
-      const txEl = document.getElementById('txLink');
-      txEl.innerHTML = 'On-chain: <a href="' + data.explorer + '" target="_blank" style="color:#00ff88">' + data.transaction.slice(0,20) + '...</a>';
-      txEl.style.display = 'block';
+    const data = await relayResponse(res);
+    validateTransaction(data.transaction);
+    transaction = data.transaction;
+    showTransaction(transaction);
+    if (data.statusUnavailable === true) {
+      log('Signature confirmed on-chain; agreement status is temporarily unavailable.', 'success');
+      document.getElementById('progress').textContent = 'Signature confirmed — threshold status unavailable';
+      if (scanBtn) scanBtn.textContent = 'Signed ✓ — check transaction for status';
+      return;
     }
-    document.getElementById('progress').textContent = data.collected + ' of ' + data.threshold + ' signed' + (data.finalized ? ' \u2014 FINALIZED \u2713' : '');
-    const scanBtn = document.getElementById('scanBtn');
+    validateStatus(data, 1);
+    renderStatus(data);
+    log('Signed on-chain — identity concealed', 'success');
     if (data.finalized) {
       log('Threshold reached. Agreement finalized anonymously.', 'success');
-      if (scanBtn) { scanBtn.disabled = true; scanBtn.textContent = 'Agreement Finalized'; }
     } else {
-      if (scanBtn) { scanBtn.textContent = 'Signed \u2713 \u2014 you have co-signed'; }
+      if (scanBtn) scanBtn.textContent = 'Signed ✓ — you have co-signed';
     }
-  } catch (e) { log('Error: ' + e.message); const b = document.getElementById('scanBtn'); if (b) b.disabled = false; }
+  } catch (e) {
+    log('Failed: ' + e.message);
+    if (transaction) {
+      document.getElementById('progress').textContent = 'Transaction receipt received — agreement status unavailable';
+      if (scanBtn) scanBtn.textContent = 'Check transaction before signing again';
+    } else if (submitting) {
+      document.getElementById('progress').textContent = 'Submission unconfirmed — check agreement status before retrying';
+    }
+  } finally {
+    if (input) input.signer_key = '0';
+    input = null;
+    signingKey = null;
+    signingInProgress = false;
+    // A known confirmed submission must not invite an automatic duplicate retry.
+    if (scanBtn) scanBtn.disabled = Boolean(transaction);
+  }
 }

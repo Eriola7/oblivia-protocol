@@ -4,7 +4,7 @@
   "description": "Zero-identity contract signing for Solana. Sign legally binding agreements with full cryptographic provability and zero identity disclosure.",
   "main": "index.js",
   "scripts": {
-    "test:proof": "node -e \"require('./lib/groth16_intent').generateIntentProof(12345678n,'Oblivia SDK proof test','1000000000').then(p=>{if(p.publicInputs.length!==128)throw new Error('invalid public input length');console.log('PASS: SDK Groth16 proof')})\""
+    "test:proof": "node scripts/check-proof.js"
   },
   "types": "index.d.ts",
   "license": "MIT",

@@ -14,10 +14,13 @@ const generatedProof = {
 
 function element() {
     const classes = new Set();
+    const listeners = new Map();
     return {
         textContent: '', disabled: false, children: [],
         classList: { add: value => classes.add(value), remove: value => classes.delete(value), contains: value => classes.has(value) },
         appendChild(child) { this.children.push(child); },
+        addEventListener(name, handler) { listeners.set(name, handler); },
+        dispatch(name) { return listeners.get(name)?.(); },
         set innerHTML(value) { assert.equal(value, ''); this.children = []; this.textContent = ''; },
     };
 }
@@ -29,6 +32,7 @@ function browser(overrides = {}) {
         return elements.get(id);
     };
     const calls = { proofs: [], requests: [] };
+    let loaded;
     const context = vm.createContext({
         require(name) {
             if (name === '@noble/hashes/sha2.js') return { sha256: bytes => crypto.createHash('sha256').update(bytes).digest() };
@@ -38,7 +42,7 @@ function browser(overrides = {}) {
             } } };
             return {};
         },
-        window: {}, Buffer, Uint8Array, TextEncoder,
+        window: { addEventListener: (_, handler) => { loaded = handler; } }, Buffer, Uint8Array, TextEncoder,
         document: { getElementById, createElement: tag => tag === 'video' && overrides.video ? overrides.video : element() },
         navigator: { mediaDevices: { getUserMedia: overrides.getUserMedia } },
         setTimeout: resolve => resolve(),
@@ -48,6 +52,7 @@ function browser(overrides = {}) {
         },
     });
     vm.runInContext(source, context);
+    loaded();
     vm.runInContext('biometricCaptured = true; biometricFeatures = Array(20).fill(0.5);', context);
     getElementById('contract').value = 'Browser failure regression contract';
     return { context, calls, element: getElementById, logs: () => getElementById('log').children.map(line => line.textContent).join('\n') };
@@ -84,6 +89,38 @@ test('proof generation failure releases the button, reports failure, and permits
     assert.match(b.logs(), /Proof generated — awaiting on-chain verification/);
     assert.doesNotMatch(b.logs(), /Proof verified/);
     assert.equal(b.element('txDisplay').children.at(-1).href, `https://explorer.solana.com/tx/${transaction}?cluster=devnet`);
+});
+
+test('agreement is locked while signing and its exact snapshot remains with the receipt', async () => {
+    let finish;
+    const b = browser({ prove: () => new Promise(resolve => { finish = resolve; }) });
+    const original = 'Pay Alice 1 SOL';
+    b.element('contract').value = original;
+    const signing = b.context.window.signContract();
+    assert.equal(b.element('contract').disabled, true);
+    assert.equal(b.element('signedContractDisplay').textContent, original);
+    // Defensive check: a programmatic edit bypassing the disabled editor still
+    // must not associate the receipt with the newly displayed agreement.
+    b.element('contract').value = 'Pay Bob 999 SOL';
+    finish(generatedProof);
+    await signing;
+    const submitted = JSON.parse(b.calls.requests[0].options.body);
+    assert.equal(Buffer.from(submitted.contractHash).toString('hex'), crypto.createHash('sha256').update(original).digest('hex'));
+    assert.equal(b.element('contractSignedDisplay').textContent, 'TEXT CHANGED');
+    assert.equal(b.element('signedContractDisplay').textContent, original);
+    assert.equal(b.element('contract').disabled, false);
+});
+
+test('editing an agreement after success invalidates its visible success state', async () => {
+    const b = browser();
+    await b.context.window.signContract();
+    assert.equal(b.element('contractSignedDisplay').textContent, 'TRUE');
+    b.element('contract').value = 'A different agreement';
+    b.element('contract').dispatch('input');
+    assert.equal(b.element('contractSignedDisplay').textContent, 'PENDING');
+    assert.equal(b.element('result').classList.contains('show'), false);
+    assert.match(b.element('txDisplay').textContent, /not submitted for this text/);
+    assert.equal(b.logs(), '');
 });
 
 test('local preparation and malformed proof failures recover without submitting', async () => {

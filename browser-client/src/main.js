@@ -36,6 +36,17 @@ let detector = null;
 let captureInProgress = false;
 let signingInProgress = false;
 
+window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('contract').addEventListener('input', () => {
+        if (signingInProgress) return;
+        document.getElementById('result').classList.remove('show');
+        document.getElementById('contractSignedDisplay').textContent = 'PENDING';
+        document.getElementById('txDisplay').textContent = 'not submitted for this text';
+        document.getElementById('proofDisplay').textContent = 'not generated';
+        document.getElementById('log').innerHTML = '';
+    });
+});
+
 function log(message, type = 'step') {
     const logEl = document.getElementById('log');
     const line = document.createElement('div');
@@ -179,17 +190,21 @@ window.captureBiometric = async function() {
 
 window.signContract = async function() {
     if (signingInProgress || captureInProgress) return;
-    const contract = document.getElementById('contract').value;
+    const contractInput = document.getElementById('contract');
+    const contract = contractInput.value;
     if (!contract) { log('Please enter contract text'); return; }
     if (!biometricCaptured) { log('Please capture biometric first'); return; }
 
     signingInProgress = true;
+    contractInput.disabled = true;
     document.getElementById('signBtn').disabled = true;
     document.getElementById('log').innerHTML = '';
     document.getElementById('result').classList.remove('show');
     document.getElementById('contractSignedDisplay').textContent = 'PENDING';
     document.getElementById('txDisplay').textContent = 'pending...';
     document.getElementById('proofDisplay').textContent = 'not generated';
+    // Keep the exact signed text with its receipt, independent of the editor.
+    document.getElementById('signedContractDisplay').textContent = contract;
 
     let stage = 'preparation';
     let signingKey;
@@ -264,6 +279,11 @@ window.signContract = async function() {
         input = null;
         signingKey = null;
         signingInProgress = false;
+        contractInput.disabled = false;
+        if (contractInput.value !== contract) {
+            document.getElementById('contractSignedDisplay').textContent = 'TEXT CHANGED';
+            log('This result belongs to the submitted agreement below, not the edited text.');
+        }
         document.getElementById('result').classList.add('show');
         document.getElementById('signBtn').disabled = false;
     }

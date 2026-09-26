@@ -9,8 +9,9 @@
  *   const result = await oblivia.signContract(biometricFeatures, contractData);
  */
 
-const { generate, reproduce } = require('./lib/fuzzyExtractor');
+const { generate } = require('./lib/fuzzyExtractor');
 const { generateIntentProof } = require('./lib/groth16_intent');
+const { validateMultisigConfig } = require('./lib/multisig_config');
 const { 
     registerContract, 
     createMultisig,
@@ -21,8 +22,14 @@ const { submitVerifiedGroth16, submitVerifiedMultiSig } = require('./lib/anchor_
 
 const { createHash } = require('crypto');
 
+function validateContractData(contractData) {
+    if (typeof contractData !== 'string' && !(contractData instanceof Uint8Array)) {
+        throw new TypeError('contractData must be a string or Uint8Array');
+    }
+}
+
 function hashContract(contractData) {
-    if (typeof contractData !== 'string') throw new TypeError('contractData must be a string');
+    validateContractData(contractData);
     return Array.from(createHash('sha256').update(contractData, 'utf8').digest());
 }
 
@@ -31,7 +38,7 @@ function hashContract(contractData) {
  * The key is never stored or transmitted
  * 
  * @param {number[]} biometricFeatures - Array of 20 facial geometry ratios
- * @returns {{ key: string, sketch: number[] }}
+ * @returns {{ key: string, sketch: string }} Hex-encoded key and sketch.
  */
 function deriveKey(biometricFeatures) {
     return generate(biometricFeatures);
@@ -42,10 +49,11 @@ function deriveKey(biometricFeatures) {
  * Proves you signed without revealing who you are
  * 
  * @param {number[]} biometricFeatures - Array of 20 facial geometry ratios
- * @param {string} contractData - The contract content to sign
+ * @param {string|Uint8Array} contractData - The contract content to sign
  * @returns {Promise<{ proofA: number[], proofB: number[], proofC: number[], publicInputs: number[], keyCommitment: number[], signatureCommitment: number[], contractHash: number[] }>}
  */
 async function generateProof(biometricFeatures, contractData) {
+    validateContractData(contractData);
     const { key: signingKeyHex } = generate(biometricFeatures);
     return generateIntentProof(BigInt('0x' + signingKeyHex.slice(0, 32)), contractData);
 }
@@ -55,7 +63,7 @@ async function generateProof(biometricFeatures, contractData) {
  * Biometric -> ZK proof -> Anchor program -> on-chain verified
  * 
  * @param {number[]} biometricFeatures - Array of 20 facial geometry ratios
- * @param {string} contractData - The contract content to sign
+ * @param {string|Uint8Array} contractData - The contract content to sign
  * @returns {{ verified, keyCommitment, signatureCommitment, contractHash }}
  */
 async function signContract(biometricFeatures, contractData) {
@@ -63,10 +71,11 @@ async function signContract(biometricFeatures, contractData) {
     const { keyCommitment, signatureCommitment, contractHash } = proof;
 
     await registerContract(contractHash);
-    await submitVerifiedGroth16(contractHash, proof);
+    const transaction = await submitVerifiedGroth16(contractHash, proof);
 
     return {
         verified: true,
+        transaction,
         keyCommitment,
         signatureCommitment,
         contractHash,
@@ -78,45 +87,50 @@ async function signContract(biometricFeatures, contractData) {
 /**
  * Create an anonymous M-of-N multi-sig contract
  * 
- * @param {string} contractData - The contract content
+ * @param {string|Uint8Array} contractData - The contract content
  * @param {number} threshold - Minimum signatures required
  * @param {number} maxSigners - Maximum signers allowed
  */
 async function createMultiSigContract(contractData, threshold, maxSigners) {
+    validateMultisigConfig(threshold, maxSigners);
     const contractHash = hashContract(contractData);
     await registerContract(contractHash);
-    await createMultisig(contractHash, threshold, maxSigners);
-    return { contractHash, threshold, maxSigners };
+    const { multisigPda, tx } = await createMultisig(contractHash, threshold, maxSigners);
+    return { contractHash, threshold, maxSigners, multisigAddress: multisigPda.toString(), transaction: tx };
 }
 
 /**
  * Sign a multi-sig contract as one of N signers
  * 
  * @param {number[]} biometricFeatures - Array of 20 facial geometry ratios
- * @param {string} contractData - The contract content to sign
+ * @param {string|Uint8Array} contractData - The contract content to sign
  */
 async function signMultiSig(biometricFeatures, contractData) {
     const proof = await generateProof(biometricFeatures, contractData);
     const { keyCommitment, signatureCommitment, contractHash } = proof;
 
-    await submitVerifiedMultiSig(contractHash, proof);
+    const transaction = await submitVerifiedMultiSig(contractHash, proof);
 
     return {
+        verified: true,
+        transaction,
         keyCommitment,
         signatureCommitment,
-        identityRevealed: false
+        contractHash,
+        identityRevealed: false,
+        dataTransmitted: false
     };
 }
 
 /**
  * Finalize a multi-sig contract once threshold is reached
  * 
- * @param {string} contractData - The contract content
+ * @param {string|Uint8Array} contractData - The contract content
  */
 async function finalizeMultiSigContract(contractData) {
     const contractHash = hashContract(contractData);
-    await finalizeMultisig(contractHash);
-    return { finalized: true, identityRevealed: false };
+    const transaction = await finalizeMultisig(contractHash);
+    return { finalized: true, identityRevealed: false, transaction };
 }
 
 module.exports = {
