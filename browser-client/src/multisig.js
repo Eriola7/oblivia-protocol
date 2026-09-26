@@ -3,6 +3,7 @@ const snarkjs = require('snarkjs');
 const tf = require('@tensorflow/tfjs');
 const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
 const { validateMultisigConfig } = require('../../sdk/lib/multisig_config');
+const { validateBiometricFeatures } = require('../../sdk/lib/biometric_features');
 
 const RELAY_URL = 'https://oblivia-relay.onrender.com';
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
@@ -19,6 +20,7 @@ let currentContract = null;
 let currentHash = null;
 let creatingInProgress = false;
 let signingInProgress = false;
+let statusRevision = 0;
 
 async function relayResponse(response) {
   const data = await response.json();
@@ -73,7 +75,7 @@ function log(msg, type = 'step') {
   el.scrollTop = el.scrollHeight;
 }
 
-function quantizeFeatures(f) { return f.map(x => Math.round(x * 255)); }
+function quantizeFeatures(f) { return validateBiometricFeatures(f).map(x => Math.round(x * 255)); }
 function applyErrorCorrection(q) { const b = 64; return q.map(v => Math.floor(v / b) * b); }
 function deriveKey(features) {
   const c = applyErrorCorrection(quantizeFeatures(features));
@@ -88,7 +90,10 @@ function extractFaceFeatures(landmarks) {
   const p = landmarks.keypoints;
   const d = (a, b) => Math.sqrt(Math.pow(p[a].x - p[b].x, 2) + Math.pow(p[a].y - p[b].y, 2));
   const fw = d(234, 454);
-  return [d(33, 263) / fw, d(1, 152) / fw, d(61, 291) / fw, d(17, 0) / fw, d(133, 362) / fw, d(70, 300) / fw, d(159, 145) / fw, d(386, 374) / fw, d(94, 19) / fw, d(2, 94) / fw, d(78, 308) / fw, d(13, 14) / fw, d(168, 6) / fw, d(55, 285) / fw, d(8, 168) / fw, d(454, 356) / fw, d(234, 127) / fw, d(152, 378) / fw, d(263, 362) / fw, d(33, 133) / fw];
+  if (!Number.isFinite(fw) || fw <= 0) {
+    throw new Error('Face measurements are invalid; please face the camera and try again');
+  }
+  return validateBiometricFeatures([d(33, 263) / fw, d(1, 152) / fw, d(61, 291) / fw, d(17, 0) / fw, d(133, 362) / fw, d(70, 300) / fw, d(159, 145) / fw, d(386, 374) / fw, d(94, 19) / fw, d(2, 94) / fw, d(78, 308) / fw, d(13, 14) / fw, d(168, 6) / fw, d(55, 285) / fw, d(8, 168) / fw, d(454, 356) / fw, d(234, 127) / fw, d(152, 378) / fw, d(263, 362) / fw, d(33, 133) / fw]);
 }
 async function loadDetector() {
   log('Loading face model...');
@@ -132,13 +137,16 @@ async function showSignMode() {
 }
 
 async function refreshStatus() {
+  const revision = ++statusRevision;
   try {
     const res = await fetch(RELAY_URL + '/multisig/status/' + encodeURIComponent(JSON.stringify(currentHash)));
     const s = await relayResponse(res);
+    if (revision !== statusRevision) return;
     if (s.exists === false) throw new Error('Multisig not found');
     validateStatus(s);
     renderStatus(s);
   } catch (e) {
+    if (revision !== statusRevision) return;
     document.getElementById('progress').textContent = 'Agreement status unavailable';
     log('Status error: ' + e.message);
   }
@@ -252,6 +260,9 @@ async function doSign() {
     const data = await relayResponse(res);
     validateTransaction(data.transaction);
     transaction = data.transaction;
+    // A confirmed submission is newer than any already in-flight status GET,
+    // including a GET whose body parsing or failure arrives after this point.
+    statusRevision++;
     showTransaction(transaction);
     if (data.statusUnavailable === true) {
       log('Signature confirmed on-chain; agreement status is temporarily unavailable.', 'success');

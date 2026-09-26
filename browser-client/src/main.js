@@ -2,6 +2,7 @@ const { sha256 } = require('@noble/hashes/sha2.js');
 const snarkjs = require('snarkjs');
 const tf = require('@tensorflow/tfjs');
 const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
+const { validateBiometricFeatures } = require('../../sdk/lib/biometric_features');
 const RELAY_URL = 'https://oblivia-relay.onrender.com';
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
 
@@ -35,10 +36,35 @@ let biometricFeatures = null;
 let detector = null;
 let captureInProgress = false;
 let signingInProgress = false;
+// Session-only confirmed receipts: never retain a signing scalar or biometric key.
+const confirmedReceipts = new Map();
+let confirmedCaptureReceipt = null;
+
+function showConfirmedReceipt(receipt) {
+    document.getElementById('signedContractDisplay').textContent = receipt.contract;
+    document.getElementById('proofDisplay').textContent = receipt.proofPreview;
+    document.getElementById('contractSignedDisplay').textContent = 'TRUE';
+    const txDisplay = document.getElementById('txDisplay');
+    const link = document.createElement('a');
+    link.href = 'https://explorer.solana.com/tx/' + receipt.transaction + '?cluster=devnet';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = receipt.transaction.slice(0, 20) + '...';
+    txDisplay.textContent = 'Verified on-chain: ';
+    txDisplay.appendChild(link);
+    document.getElementById('result').classList.add('show');
+}
 
 window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('contract').addEventListener('input', () => {
         if (signingInProgress) return;
+        const alreadySigned = confirmedCaptureReceipt &&
+            confirmedCaptureReceipt.contract === document.getElementById('contract').value;
+        document.getElementById('signBtn').disabled = Boolean(alreadySigned) || !biometricCaptured || captureInProgress;
+        if (alreadySigned) {
+            showConfirmedReceipt(confirmedCaptureReceipt);
+            return;
+        }
         document.getElementById('result').classList.remove('show');
         document.getElementById('contractSignedDisplay').textContent = 'PENDING';
         document.getElementById('txDisplay').textContent = 'not submitted for this text';
@@ -57,7 +83,7 @@ function log(message, type = 'step') {
 }
 
 function quantizeFeatures(features) {
-    return features.map(f => Math.round(f * 255));
+    return validateBiometricFeatures(features).map(f => Math.round(f * 255));
 }
 
 function applyErrorCorrection(quantized) {
@@ -87,6 +113,9 @@ function extractFaceFeatures(landmarks) {
     );
     
     const faceWidth = dist(234, 454);
+    if (!Number.isFinite(faceWidth) || faceWidth <= 0) {
+        throw new Error('Face measurements are invalid; please face the camera and try again');
+    }
     
     // Normalize all distances by face width for scale invariance
     const features = [
@@ -112,7 +141,7 @@ function extractFaceFeatures(landmarks) {
         dist(33, 133) / faceWidth,   // outer left eye
     ];
     
-    return features;
+    return validateBiometricFeatures(features);
 }
 
 async function loadDetector() {
@@ -129,6 +158,9 @@ async function loadDetector() {
 window.captureBiometric = async function() {
     if (captureInProgress || signingInProgress) return;
     captureInProgress = true;
+    // A new capture may derive a different key. Compare its public commitment
+    // against earlier receipts after proving, without persisting the secret.
+    confirmedCaptureReceipt = null;
     const box = document.getElementById('biometricBox');
     const status = document.getElementById('biometricStatus');
     const icon = document.getElementById('biometricIcon');
@@ -194,6 +226,12 @@ window.signContract = async function() {
     const contract = contractInput.value;
     if (!contract) { log('Please enter contract text'); return; }
     if (!biometricCaptured) { log('Please capture biometric first'); return; }
+    if (confirmedCaptureReceipt && confirmedCaptureReceipt.contract === contract) {
+        showConfirmedReceipt(confirmedCaptureReceipt);
+        document.getElementById('signBtn').disabled = true;
+        log('Already signed with this capture — keeping the confirmed receipt.', 'success');
+        return;
+    }
 
     signingInProgress = true;
     contractInput.disabled = true;
@@ -235,6 +273,14 @@ window.signContract = async function() {
 
         const keyCommitment = '0x' + Buffer.from(payload.keyCommitment).toString('hex');
         const signatureCommitment = '0x' + Buffer.from(payload.signatureCommitment).toString('hex');
+        const receiptKey = Buffer.from(contractHash).toString('hex') + ':' + keyCommitment;
+        const existingReceipt = confirmedReceipts.get(receiptKey);
+        if (existingReceipt) {
+            confirmedCaptureReceipt = existingReceipt;
+            showConfirmedReceipt(existingReceipt);
+            log('This signing key already signed this agreement — keeping the confirmed receipt.', 'success');
+            return;
+        }
 
         stage = 'submission';
         log('Submitting to Solana for verification... (sponsored — free to you)');
@@ -255,14 +301,9 @@ window.signContract = async function() {
         if (typeof data.transaction !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(data.transaction)) {
             throw new Error('Relay did not return a valid transaction signature');
         }
-        const txDisplay = document.getElementById('txDisplay');
-        const link = document.createElement('a');
-        link.href = 'https://explorer.solana.com/tx/' + data.transaction + '?cluster=devnet';
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = data.transaction.slice(0, 20) + '...';
-        txDisplay.textContent = 'Verified on-chain: ';
-        txDisplay.appendChild(link);
+        confirmedCaptureReceipt = { contract, transaction: data.transaction, proofPreview };
+        confirmedReceipts.set(receiptKey, confirmedCaptureReceipt);
+        showConfirmedReceipt(confirmedCaptureReceipt);
         log('Signed on-chain — identity concealed', 'success');
         document.getElementById('contractSignedDisplay').textContent = 'TRUE';
         log('Done. Identity: concealed. Proof: on-chain.', 'success');
@@ -285,6 +326,7 @@ window.signContract = async function() {
             log('This result belongs to the submitted agreement below, not the edited text.');
         }
         document.getElementById('result').classList.add('show');
-        document.getElementById('signBtn').disabled = false;
+        document.getElementById('signBtn').disabled = Boolean(confirmedCaptureReceipt &&
+            confirmedCaptureReceipt.contract === contractInput.value);
     }
 }

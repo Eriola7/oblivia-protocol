@@ -2,6 +2,8 @@ require('dotenv').config();
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
 const { validateMultisigConfig, assertMultisigConfig } = require('./sdk/lib/multisig_config');
+const { createAccountReaders } = require('./sdk/lib/account_state');
+const { readContractAccount, readMultisigAccount } = createAccountReaders(anchor);
 
 const PROGRAM_ID = new PublicKey('HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG');
 const REGISTRY_SEED = Buffer.from('oblivia_registry');
@@ -70,9 +72,9 @@ async function registerContract(contractHash) {
         PROGRAM_ID
     );
 
-    // Check if contract already registered
+    // Lamports alone do not mean the PDA has been initialized.
     const existing = await connection.getAccountInfo(contractPda);
-    if (existing) {
+    if (readContractAccount(existing, contractHashBytes)) {
         console.log('Contract already registered on-chain:', contractPda.toString());
         return { contractPda, tx: null };
     }
@@ -249,9 +251,9 @@ async function createMultisig(contractHash, threshold, maxSigners) {
         [MULTISIG_SEED, contractHashBytes], PROGRAM_ID
     );
 
-    const existing = await connection.getAccountInfo(multisigPda);
+    const existing = readMultisigAccount(await connection.getAccountInfo(multisigPda), contractPda);
     if (existing) {
-        assertMultisigConfig(await program.account.multiSigContract.fetch(multisigPda), threshold, maxSigners);
+        assertMultisigConfig(existing, threshold, maxSigners);
         console.log('MultiSig already exists:', multisigPda.toString());
         return { multisigPda, tx: null };
     }

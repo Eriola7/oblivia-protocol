@@ -1,17 +1,12 @@
 const { sha256 } = require('@noble/hashes/sha2.js');
+const { validateBiometricFeatures } = require('./biometric_features');
 
 /**
- * Oblivia Biometric Fuzzy Extractor
- * 
- * Implements a fuzzy extractor construction based on Dodis et al. (2004)
- * that derives a stable cryptographic key from noisy biometric input.
- * 
- * Components:
- * - Quantization: maps continuous biometric features to discrete values
- * - Error correction: absorbs natural biometric variance via coarse bucketing
- * - Secure sketch: helper string P that enables reconstruction without
- *   revealing information about the source biometric
- * - Key derivation: SHA-256 of corrected features + domain separation salt
+ * Oblivia prototype biometric key derivation.
+ * Quantizes 20 normalized measurements, coarsely buckets them, then hashes the
+ * resulting bytes with a domain-separation salt. This is not a hardened fuzzy
+ * extractor: stability, entropy, liveness and human uniqueness are unproven.
+ * The residual "sketch" is not used by reproduce() and has no privacy guarantee.
  */
 
 const BUCKET_SIZE = 64;
@@ -19,7 +14,7 @@ const BITS = 8;
 
 function quantizeFeatures(features) {
     const levels = Math.pow(2, BITS);
-    return features.map(f => Math.round(f * (levels - 1)));
+    return validateBiometricFeatures(features).map(f => Math.round(f * (levels - 1)));
 }
 
 function applyErrorCorrection(quantized) {
@@ -35,9 +30,9 @@ function bytesToHex(bytes) {
 }
 
 /**
- * Generate - derives a key R and helper string P from biometric input w
- * P is safe to store publicly - reveals nothing about w
- * @param {number[]} features - raw biometric feature vector
+ * Derive a prototype key and residual sketch from local input.
+ * Do not publish the sketch: its biometric information leakage is not assessed.
+ * @param {number[]} features - exactly 20 finite measurements in [0, 1]
  * @returns {{ key: string, sketch: string }}
  */
 function generate(features, salt = 'oblivia-v1') {
@@ -52,8 +47,7 @@ function generate(features, salt = 'oblivia-v1') {
 
     const key = bytesToHex(sha256(combined));
 
-    // Secure sketch: XOR of quantized and corrected values
-    // Allows reconstruction from nearby input without revealing original
+    // Residual sketch retained for API compatibility; not used for recovery.
     const sketch = quantized.map((v, i) => v ^ corrected[i]);
     const sketchHex = bytesToHex(Uint8Array.from(sketch));
 
@@ -61,17 +55,14 @@ function generate(features, salt = 'oblivia-v1') {
 }
 
 /**
- * Reproduce - reconstructs key R from noisy biometric w' and helper string P
- * Works as long as distance(w, w') is within tolerance
- * @param {number[]} features - noisy biometric reading
- * @param {string} sketchHex - helper string from generate()
+ * Derive a key again using the same quantization and bucketing.
+ * Readings match only if every measurement remains in its original bucket.
+ * @param {number[]} features - exactly 20 finite measurements in [0, 1]
+ * @param {string} sketchHex - unused residual retained for API compatibility
  * @returns {string} - reconstructed key
  */
 function reproduce(features, sketchHex, salt = 'oblivia-v1') {
-    // Reproduce applies the same coarse bucketing as generate()
-    // The sketch is stored as a public helper string for future
-    // hardened reconstruction (Milestone 1 hardening item)
-    // Current implementation: coarse bucketing absorbs variance within BUCKET_SIZE/2
+    // This prototype does not perform sketch-based reconstruction.
     const quantized = quantizeFeatures(features);
     const corrected = applyErrorCorrection(quantized);
 

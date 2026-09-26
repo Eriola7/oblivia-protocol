@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 const { validateMultisigConfig, assertMultisigConfig } = require('../sdk/lib/multisig_config');
+const { contractPda, contractAccount, multisigAccount } = require('./helpers/account_fixtures');
 const root = path.join(__dirname, '..');
 
 test('multisig configuration rejects invalid and conflicting settings', () => {
@@ -65,15 +66,15 @@ for (const file of ['anchor_integration.js', 'sdk/lib/anchor_integration.js']) {
         const nativeRequire = createRequire(filename);
         const calls = [];
         const payer = require('@solana/web3.js').Keypair.generate();
-        let existing = { threshold: 1, maxSigners: 3 };
+        let existing = await multisigAccount({ threshold: 1 });
         const method = name => () => ({ accounts(accounts) { calls.push({ name, accounts }); return { instruction: async () => ({ keys: [], programId: payer.publicKey, data: Buffer.alloc(0) }) }; } });
         const program = { methods: { verifyGroth16V2: method('verify'), recordVerifiedMultisig: method('record') }, account: { multiSigContract: { fetch: async () => existing } } };
         const provider = { sendAndConfirm: async () => 'test-transaction' };
-        const context = vm.createContext({ require: name => name === 'dotenv' ? { config() {} } : nativeRequire(name), module: { exports: {} }, __dirname: path.dirname(filename), Buffer, process: { env: {} }, console: { log() {} }, payer, program, provider });
+        const context = vm.createContext({ require: name => name === 'dotenv' ? { config() {} } : nativeRequire(name), module: { exports: {} }, __dirname: path.dirname(filename), Buffer, process: { env: {} }, console: { log() {} }, payer, program, provider, lookup: async () => existing });
         vm.runInContext(fs.readFileSync(filename, 'utf8'), context);
-        vm.runInContext('getKeypair = () => payer; getProvider = () => provider; getProgram = async () => program; connection.getAccountInfo = async () => ({});', context);
+        vm.runInContext('getKeypair = () => payer; getProvider = () => provider; getProgram = async () => program; connection.getAccountInfo = lookup;', context);
         await assert.rejects(context.module.exports.createMultisig(Array(32).fill(1), 2, 3), /different multisig settings/);
-        existing = { threshold: 2, maxSigners: 3 };
+        existing = await multisigAccount();
         assert.equal((await context.module.exports.createMultisig(Array(32).fill(1), 2, 3)).tx, null);
         await context.module.exports.submitVerifiedMultiSig(Array(32).fill(1), { keyCommitment: Array(32).fill(2), signatureCommitment: Array(32).fill(3), proofA: [], proofB: [], proofC: [], publicInputs: [] });
         assert.equal(calls.length, 2);
@@ -118,7 +119,8 @@ test('relay refuses conflicting settings and passes the proof record to counting
     const payer = require('@solana/web3.js').Keypair.generate();
     const calls = [];
     const method = name => () => ({ accounts(accounts) { calls.push({ name, accounts }); return { instruction: async () => ({ keys: [], programId: payer.publicKey, data: Buffer.alloc(0) }) }; } });
-    let existing = { threshold: 1, maxSigners: 3 };
+    let existing = await multisigAccount({ threshold: 1 });
+    const contract = await contractAccount();
     const program = {
         methods: { verifyGroth16V2: method('verify'), recordVerifiedMultisig: method('record') },
         account: { multiSigContract: { fetch: async () => existing } },
@@ -127,16 +129,17 @@ test('relay refuses conflicting settings and passes the proof record to counting
     const context = vm.createContext({
         require: name => name === 'express' ? express : name === 'dotenv' ? { config() {} } : nativeRequire(name),
         __dirname: path.dirname(filename), process: { env: {} }, Buffer, console: { log() {} }, program, payer,
+        lookup: async address => address.equals(contractPda) ? contract : existing,
     });
     vm.runInContext(fs.readFileSync(filename, 'utf8'), context);
-    vm.runInContext('getProgram = () => ({ program, keypair: payer }); connection.getAccountInfo = async () => ({});', context);
+    vm.runInContext('getProgram = () => ({ program, keypair: payer }); connection.getAccountInfo = lookup;', context);
     let response;
     const res = { json: body => { response = body; } };
     const contractHash = Array(32).fill(1);
     await routes.get('/multisig/create')({ body: { contractHash, threshold: 2, maxSigners: 3 } }, res);
     assert.match(response.error, /different multisig settings/);
     assert.equal(calls.length, 0);
-    existing = { threshold: 2, maxSigners: 3 };
+    existing = await multisigAccount();
     await routes.get('/multisig/create')({ body: { contractHash, threshold: 2, maxSigners: 3 } }, res);
     assert.equal(response.alreadyExists, true);
     await routes.get('/multisig/create')({ body: { contractHash, threshold: 0, maxSigners: 3 } }, res);

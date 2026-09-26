@@ -4,6 +4,7 @@
   "description": "Zero-identity contract signing protocol for Solana",
   "main": "integration.js",
   "scripts": {
+    "setup:test": "npm ci && npm --prefix sdk ci && npm --prefix relay ci && npm --prefix zk_groth16 ci",
     "test": "node --test tests/*.test.js && npm --prefix zk_groth16 run test:binding",
     "test:regressions": "node --test tests/*.test.js",
     "test:multisig": "cd oblivia-contracts && anchor build && cargo test -p oblivia-contracts --test multisig_proof_gate",
@@ -16,7 +17,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/Eriola7/oblivia-protocol/issues"

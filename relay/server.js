@@ -5,21 +5,14 @@ const cors = require('cors');
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
 const { validateMultisigConfig, assertMultisigConfig } = require('../sdk/lib/multisig_config');
+const { createAccountReaders } = require('../sdk/lib/account_state');
+const { readContractAccount, readMultisigAccount } = createAccountReaders(anchor);
 
 const app = express();
 const relayOrigins = (process.env.OBLIVIA_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 app.use(cors({ origin: relayOrigins.length ? relayOrigins : false }));
 app.use(express.json({ limit: '16kb' }));
 app.use('/proving-assets', express.static(path.join(__dirname, '../zk_groth16')));
-
-// A sponsored relay must never be an unauthenticated transaction oracle.
-function requireRelayKey(req, res, next) {
-    const configuredKey = process.env.OBLIVIA_RELAY_API_KEY;
-    if (!configuredKey || req.get('authorization') !== `Bearer ${configuredKey}`) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    next();
-}
 
 const relayWindows = new Map();
 function limitSponsoredRequest(req, res, next) {
@@ -118,9 +111,9 @@ app.post('/sign', limitSponsoredRequest, async (req, res) => {
         const [signerRecordPda] = PublicKey.findProgramAddressSync(
             [Buffer.from('oblivia_signer_record'), contractHashBytes, keyCommitmentBytes], PROGRAM_ID);
 
-        // Register contract if it doesn't exist yet
+        // A funded system-owned PDA still needs registration.
         const contractInfo = await connection.getAccountInfo(contractPda);
-        if (!contractInfo) {
+        if (!readContractAccount(contractInfo, contractHashBytes)) {
             await program.methods
                 .registerContract(Array.from(contractHashBytes))
                 .accounts({
@@ -175,16 +168,18 @@ app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
         const [multisigPda] = PublicKey.findProgramAddressSync([MULTISIG_SEED, contractHashBytes], PROGRAM_ID);
 
         const contractInfo = await connection.getAccountInfo(contractPda);
-        if (!contractInfo) {
+        const contract = readContractAccount(contractInfo, contractHashBytes);
+        const multisigInfo = await connection.getAccountInfo(multisigPda);
+        const existing = readMultisigAccount(multisigInfo, contractPda);
+        // Validate existing accounts and policy before spending registration rent.
+        if (existing) assertMultisigConfig(existing, threshold, maxSigners);
+        if (!contract) {
             await program.methods.registerContract(Array.from(contractHashBytes))
                 .accounts({ registry: registryPda, contract: contractPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
                 .signers([keypair]).rpc();
         }
 
-        const multisigInfo = await connection.getAccountInfo(multisigPda);
-        if (multisigInfo) {
-            const existing = await program.account.multiSigContract.fetch(multisigPda);
-            assertMultisigConfig(existing, threshold, maxSigners);
+        if (existing) {
             return res.json({ alreadyExists: true, multisig: multisigPda.toString() });
         }
 

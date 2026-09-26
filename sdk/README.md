@@ -70,6 +70,8 @@ Full TypeScript definitions ship with the package (`index.d.ts`).
 
 Contract data accepts a UTF-8 string or exact `Uint8Array` bytes. The Node entry point returns byte arrays for hashes and commitments. The separate `@oblivia/sdk/browser` entry point exposes local proving helpers, not the Node submission API; its `deriveKey` returns the key string directly.
 
+Biometric features must be a dense JavaScript array of exactly 20 finite numbers in the inclusive range `[0, 1]`. Empty or sparse arrays, non-numeric values, and out-of-range measurements are rejected before proving. Invalid captures must be repeated, not clamped or coerced into a signing key. Input validation does not establish biometric entropy, liveness, or uniqueness.
+
 ## How It Works
 
 1. **Biometric → key.** The prototype extractor derives a key from local facial geometry. Stability, entropy, liveness and distinct-human uniqueness have not been established. Biometric features are not included in the submission.

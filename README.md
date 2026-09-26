@@ -59,14 +59,32 @@ The same Groth16 relation is proven by the client and verified by the on-chain p
 
 The root `multisig_demo.js` and `witness_node.js` are also historical experiments, not supported v2 examples. The former uses the disabled commitment-only path; the latter is not a verified witness service. Use the current reference clients and SDK examples instead.
 
+`slol/v1/schema.json` is an experimental document format, not an integrated protocol component. Its example agreement types do not implement legal enforcement, asset transfers, or identity guarantees.
+
 ## Local verification
 
+Run these commands from the repository root. The packages have separate lockfiles; a root-only `npm ci` does **not** install the SDK, relay, or circuit-test dependencies.
+
 ```bash
-npm --prefix zk_groth16 run test:binding
-npm run test:regressions
-npm run test:multisig
-npm --prefix browser-client run build
+npm run setup:test
+npm test
+```
+
+`setup:test` runs `npm ci` in the root, `sdk/`, `relay/`, and `zk_groth16/`. `npm test` runs the JavaScript regressions and real local Groth16 contract-binding checks. Neither command submits transactions or requires a wallet. Use Node.js 22.14+ for the complete development setup, including the browser build.
+
+Additional checks:
+
+```bash
 npm --prefix sdk run test:proof
+npm --prefix browser-client ci
+npm run build:browser
+```
+
+Program checks require the Rust, Anchor, and Solana build toolchains separately; `setup:test` does not install them:
+
+```bash
+npm run test:program
+npm run test:multisig
 ```
 
 ## Devnet program
@@ -88,7 +106,7 @@ Agreement settings are first-created and immutable for a contract hash. Relay an
 
 ## Development notes
 
-The relay and reference clients must be deployed and configured together. Set `OBLIVIA_ALLOWED_ORIGINS` to the actual reference-app origins before exposing the relay; do not use its development configuration as production infrastructure.
+The relay and reference clients must be deployed and configured together. The reference relay is publicly callable and has no API-key authentication. Set `OBLIVIA_ALLOWED_ORIGINS` to the actual reference-app origins; CORS restricts browser access, not arbitrary clients. Basic in-memory rate limits are not production sponsorship or abuse protection. Do not use this Devnet configuration as production infrastructure.
 
 ## License
 

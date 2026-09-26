@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://oblivia.protocol/slol/v1/schema.json",
   "title": "Smart Legal Object Layer v1",
-  "description": "Open standard for representing legal agreements as composable on-chain objects. Zero identity required. All parties identified by cryptographic commitments only.",
+  "description": "Experimental agreement-document schema, not integrated with the deployed Oblivia program, relay, or SDK. Commitments describe the active Circom/Groth16 v2 format. This schema provides no legal enforcement, asset transfer, or identity guarantees.",
   "version": "1.0.0",
   "definitions": {
     "Party": {
@@ -13,16 +13,16 @@
         "key_commitment": {
           "type": "string",
           "pattern": "^0x[0-9a-f]{64}$",
-          "description": "Pedersen hash of signer's biometric-derived key. Proves unique identity without revealing it."
+          "description": "Poseidon commitment to the private signing scalar. Identifies a key commitment, not a unique person or legal identity."
         },
         "signature_commitment": {
           "type": "string",
           "pattern": "^0x[0-9a-f]{64}$",
-          "description": "Pedersen hash binding signer key + contract hash + timestamp. Non-repudiable."
+          "description": "Poseidon commitment binding the private signing scalar, both 128-bit limbs of the SHA-256 contract hash, and the private timestamp. Does not establish legal non-repudiation."
         },
         "timestamp": {
           "type": "integer",
-          "description": "Unix timestamp of signing"
+          "description": "Optional document-supplied Unix timestamp; not independently attested by the protocol's public proof outputs."
         },
         "on_chain_tx": {
           "type": "string",
@@ -113,7 +113,7 @@
     },
     {
       "title": "GovernanceDecision",
-      "description": "DAO governance agreement. All voters anonymous. Threshold signatures enforce quorum.",
+      "description": "Experimental governance-document fields. Protocol thresholds count distinct key commitments, not proven distinct or authorized voters.",
       "allOf": [
         { "$ref": "#/definitions/ContractBase" },
         {
@@ -153,7 +153,7 @@
     },
     {
       "title": "InheritanceDirective",
-      "description": "On-chain inheritance. Asset transfer conditions enforced programmatically. No lawyers required.",
+      "description": "Experimental inheritance-directive fields only. No asset-transfer or legal-enforcement implementation is provided.",
       "allOf": [
         { "$ref": "#/definitions/ContractBase" },
         {
@@ -173,7 +173,7 @@
     },
     {
       "title": "ZeroIDDeal",
-      "description": "Fully anonymous multi-party deal. All signers pseudonymous. Non-repudiable by construction.",
+      "description": "Experimental multi-party agreement fields using key commitments. No legal identity or non-repudiation guarantee is provided.",
       "allOf": [
         { "$ref": "#/definitions/ContractBase" },
         {

@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const config = require('../sdk/lib/multisig_config');
+const biometric = require('../sdk/lib/biometric_features');
 
 const source = fs.readFileSync(path.join(__dirname, '../browser-client/src/multisig.js'), 'utf8');
 const transaction = '2'.repeat(88);
@@ -37,6 +38,7 @@ function browser(overrides = {}) {
         require(name) {
             if (name === '@noble/hashes/sha2.js') return { sha256: bytes => crypto.createHash('sha256').update(bytes).digest() };
             if (name === '../../sdk/lib/multisig_config') return config;
+            if (name === '../../sdk/lib/biometric_features') return biometric;
             if (name === 'snarkjs') return { groth16: { fullProve: async input => {
                 calls.proofs.push(input);
                 return overrides.prove ? overrides.prove(input) : proof;
@@ -191,6 +193,60 @@ test('multisig status lookup rejects bad HTTP and malformed counters', async () 
         await vm.runInContext('refreshStatus()', b.context);
         assert.equal(b.get('progress').textContent, 'Agreement status unavailable');
     }
+});
+
+test('late status responses cannot replace a newer confirmed multisig receipt or status', async () => {
+    for (const statusUnavailable of [false, true]) {
+        for (const staleFails of [false, true]) {
+            let finishStatus;
+            const b = browser({ fetch: async (url) => {
+                if (url.includes('/multisig/status/')) return new Promise(resolve => { finishStatus = resolve; });
+                return response(statusUnavailable
+                    ? { transaction, statusUnavailable: true }
+                    : { transaction, collected: 2, threshold: 2, finalized: true });
+            } });
+            const status = vm.runInContext('refreshStatus()', b.context);
+            await b.sign();
+            const confirmedProgress = b.get('progress').textContent;
+            const confirmedButton = b.get('scanBtn').textContent;
+            finishStatus(staleFails
+                ? response({ error: 'old request failed' }, false)
+                : response({ collected: 1, threshold: 2, finalized: false }));
+            await status;
+            assert.equal(b.get('progress').textContent, confirmedProgress);
+            assert.equal(b.get('scanBtn').textContent, confirmedButton);
+            assert.equal(b.get('scanBtn').disabled, true);
+            assert.equal(b.get('txLink').children.length, 1);
+            assert.doesNotMatch(b.logs(), /Status error/);
+        }
+    }
+});
+
+test('overlapping status requests only apply the latest response', async () => {
+    const finishes = [];
+    const b = browser({ fetch: () => new Promise(resolve => finishes.push(resolve)) });
+    const first = vm.runInContext('refreshStatus()', b.context);
+    const second = vm.runInContext('refreshStatus()', b.context);
+    finishes[1](response({ collected: 2, threshold: 2, finalized: true }));
+    await second;
+    finishes[0](response({ collected: 1, threshold: 2, finalized: false }));
+    await first;
+    assert.match(b.get('progress').textContent, /2 of 2 signed — FINALIZED/);
+    assert.equal(b.get('scanBtn').disabled, true);
+});
+
+test('malformed multisig measurements cannot reach proof generation or submission', async () => {
+    for (const expression of ['[]', 'Array(19).fill(0.5)', 'Array(20)', 'Array(20).fill(NaN)', 'Array(20).fill(Infinity)', 'Array(20).fill(null)', 'Array(20).fill("0.5")', 'Array(20).fill(-0.1)', 'Array(20).fill(1.1)']) {
+        const b = browser();
+        vm.runInContext(`biometricFeatures = ${expression};`, b.context);
+        await b.sign();
+        assert.equal(b.calls.proofs.length, 0);
+        assert.equal(b.calls.requests.length, 0);
+        assert.equal(b.get('scanBtn').disabled, false);
+        assert.match(b.logs(), /exactly 20 finite numbers/);
+    }
+    const b = browser();
+    assert.throws(() => vm.runInContext('extractFaceFeatures({ keypoints: Array.from({length: 455}, () => ({x: 0, y: 0})) })', b.context), /Face measurements are invalid/);
 });
 
 test('HTML templates let HtmlWebpackPlugin insert each entry bundle exactly once', () => {

@@ -1,7 +1,7 @@
 {
   "name": "@oblivia/sdk",
   "version": "0.1.0",
-  "description": "Zero-identity contract signing for Solana. Sign legally binding agreements with full cryptographic provability and zero identity disclosure.",
+  "description": "Development SDK for contract-bound, anonymous Groth16 signing on Solana Devnet. Not audited for production use.",
   "main": "index.js",
   "scripts": {
     "test:proof": "node scripts/check-proof.js"

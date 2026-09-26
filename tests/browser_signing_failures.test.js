@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
+const biometric = require('../sdk/lib/biometric_features');
 
 const source = fs.readFileSync(path.join(__dirname, '../browser-client/src/main.js'), 'utf8');
 const transaction = '2'.repeat(88);
@@ -15,8 +16,11 @@ const generatedProof = {
 function element() {
     const classes = new Set();
     const listeners = new Map();
+    let textContent = '';
     return {
-        textContent: '', disabled: false, children: [],
+        disabled: false, children: [],
+        get textContent() { return textContent; },
+        set textContent(value) { textContent = value; this.children = []; },
         classList: { add: value => classes.add(value), remove: value => classes.delete(value), contains: value => classes.has(value) },
         appendChild(child) { this.children.push(child); },
         addEventListener(name, handler) { listeners.set(name, handler); },
@@ -36,6 +40,7 @@ function browser(overrides = {}) {
     const context = vm.createContext({
         require(name) {
             if (name === '@noble/hashes/sha2.js') return { sha256: bytes => crypto.createHash('sha256').update(bytes).digest() };
+            if (name === '../../sdk/lib/biometric_features') return biometric;
             if (name === 'snarkjs') return { groth16: { async fullProve(input) {
                 calls.proofs.push(input);
                 return overrides.prove ? overrides.prove(input) : generatedProof;
@@ -78,7 +83,7 @@ test('proof generation failure releases the button, reports failure, and permits
 
     fail = false;
     await b.context.window.signContract();
-    assert.equal(b.element('signBtn').disabled, false);
+    assert.equal(b.element('signBtn').disabled, true);
     assert.equal(b.element('contractSignedDisplay').textContent, 'TRUE');
     assert.equal(b.calls.requests.length, 1);
     assert.equal(b.calls.proofs[1].signer_key, '0');
@@ -169,7 +174,96 @@ test('overlapping sign calls do not generate or submit a duplicate proof', async
     finish(generatedProof);
     await first;
     assert.equal(b.calls.requests.length, 1);
-    assert.equal(b.element('signBtn').disabled, false);
+    assert.equal(b.element('signBtn').disabled, true);
+});
+
+test('sequential signing of the same capture preserves its receipt without proving or submitting again', async () => {
+    const b = browser();
+    await b.context.window.signContract();
+    const originalProof = b.element('proofDisplay').textContent;
+    await b.context.window.signContract();
+    assert.equal(b.calls.proofs.length, 1);
+    assert.equal(b.calls.requests.length, 1);
+    assert.equal(b.element('contractSignedDisplay').textContent, 'TRUE');
+    assert.equal(b.element('proofDisplay').textContent, originalProof);
+    assert.equal(b.element('txDisplay').children.length, 1);
+    assert.equal(b.element('txDisplay').children[0].href, `https://explorer.solana.com/tx/${transaction}?cluster=devnet`);
+    assert.equal(b.element('signBtn').disabled, true);
+});
+
+test('changed agreements remain signable and returning to a known agreement restores its receipt', async () => {
+    for (const rescan of [false, true]) {
+        const b = browser({
+            video: { play: async () => {} },
+            getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+        });
+        const original = b.element('contract').value;
+        await b.context.window.signContract();
+        b.element('contract').value = 'A different agreement';
+        b.element('contract').dispatch('input');
+        assert.equal(b.element('signBtn').disabled, false);
+        await b.context.window.signContract();
+        assert.equal(b.calls.requests.length, 2);
+        b.element('contract').value = original;
+        b.element('contract').dispatch('input');
+        if (rescan) {
+            vm.runInContext('detector = { estimateFaces: async () => [{}] }; extractFaceFeatures = () => Array(20).fill(0.5);', b.context);
+            await b.context.window.captureBiometric();
+        }
+        await b.context.window.signContract();
+        assert.equal(b.calls.proofs.length, 3, 'the public commitment identifies the previously signed key');
+        assert.equal(b.calls.requests.length, 2, 'do not resubmit a known contract/key pair');
+        assert.equal(b.element('contractSignedDisplay').textContent, 'TRUE');
+        assert.equal(b.element('signedContractDisplay').textContent, original);
+        assert.equal(b.element('txDisplay').children.length, 1);
+    }
+});
+
+test('rescanning compares public commitments, preserving repeated-key receipts but allowing a different key', async () => {
+    for (const sameKey of [true, false]) {
+        let proofCount = 0;
+        const b = browser({
+            video: { play: async () => {} },
+            getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+            prove: async () => ({ ...generatedProof, publicSignals: [String(++proofCount === 1 || sameKey ? 9 : 13), '10', '11', '12'] }),
+        });
+        await b.context.window.signContract();
+        vm.runInContext('detector = { estimateFaces: async () => [{}] }; extractFaceFeatures = () => Array(20).fill(0.75);', b.context);
+        await b.context.window.captureBiometric();
+        assert.equal(b.element('signBtn').disabled, false);
+        await b.context.window.signContract();
+        assert.equal(b.calls.proofs.length, 2);
+        assert.equal(b.calls.requests.length, sameKey ? 1 : 2);
+        assert.equal(b.element('contractSignedDisplay').textContent, 'TRUE');
+        assert.equal(b.element('txDisplay').children.length, 1);
+        assert.equal(b.element('signBtn').disabled, true);
+    }
+});
+
+test('malformed feature vectors fail before proof generation or submission', async () => {
+    for (const expression of ['[]', 'Array(19).fill(0.5)', 'Array(20)', 'Array(20).fill(NaN)', 'Array(20).fill(Infinity)', 'Array(20).fill(null)', 'Array(20).fill("0.5")', 'Array(20).fill(-0.1)', 'Array(20).fill(1.1)']) {
+        const b = browser();
+        vm.runInContext(`biometricFeatures = ${expression};`, b.context);
+        await b.context.window.signContract();
+        assert.equal(b.calls.proofs.length, 0);
+        assert.equal(b.calls.requests.length, 0);
+        assert.equal(b.element('contractSignedDisplay').textContent, 'FALSE');
+        assert.match(b.logs(), /exactly 20 finite numbers/);
+    }
+});
+
+test('zero-width face measurements cannot become an accepted capture', async () => {
+    const b = browser({
+        video: { play: async () => {} },
+        getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+    });
+    vm.runInContext('detector = { estimateFaces: async () => [{ keypoints: Array.from({length: 455}, () => ({x: 0, y: 0})) }] };', b.context);
+    await b.context.window.captureBiometric();
+    assert.equal(vm.runInContext('biometricCaptured', b.context), false);
+    assert.equal(vm.runInContext('biometricFeatures', b.context), null);
+    assert.equal(b.element('signBtn').disabled, true);
+    assert.match(b.logs(), /Face measurements are invalid/);
+    assert.equal(b.calls.proofs.length, 0);
 });
 
 test('camera failure stops the stream, clears stale capture state, and allows another scan', async () => {
