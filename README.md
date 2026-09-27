@@ -70,7 +70,7 @@ npm run setup:test
 npm test
 ```
 
-`setup:test` runs `npm ci` in the root, `sdk/`, `relay/`, and `zk_groth16/`. `npm test` runs the JavaScript regressions and real local Groth16 contract-binding checks. Neither command submits transactions or requires a wallet. Use Node.js 22.14+ for the complete development setup, including the browser build.
+`setup:test` runs `npm ci` in the root, `sdk/`, `relay/`, and `zk_groth16/`. `npm test` runs the JavaScript regressions, SDK TypeScript interface checks, and real local Groth16 contract-binding checks. Neither command submits transactions or requires a wallet. Use Node.js 22.14+ for the complete development setup, including the browser build.
 
 Additional checks:
 

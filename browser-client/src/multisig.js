@@ -21,6 +21,8 @@ let currentHash = null;
 let creatingInProgress = false;
 let signingInProgress = false;
 let statusRevision = 0;
+// Finalization is terminal for this agreement, even if another pending operation fails.
+let finalizedStatus = null;
 
 async function relayResponse(response) {
   const data = await response.json();
@@ -45,6 +47,10 @@ function validateStatus(status, minimumCollected = 0) {
 }
 
 function renderStatus(status) {
+  if (status.finalized && !finalizedStatus) {
+    finalizedStatus = { collected: status.collected, threshold: status.threshold, finalized: true };
+  }
+  status = finalizedStatus || status;
   document.getElementById('progress').textContent =
     status.collected + ' of ' + status.threshold + ' signed' + (status.finalized ? ' — FINALIZED ✓' : '');
   if (status.finalized) {
@@ -147,7 +153,8 @@ async function refreshStatus() {
     renderStatus(s);
   } catch (e) {
     if (revision !== statusRevision) return;
-    document.getElementById('progress').textContent = 'Agreement status unavailable';
+    if (finalizedStatus) renderStatus(finalizedStatus);
+    else document.getElementById('progress').textContent = 'Agreement status unavailable';
     log('Status error: ' + e.message);
   }
 }
@@ -198,14 +205,16 @@ window.copyLink = function () {
 
 window.captureBiometric = async function () {
   const scanBtn = document.getElementById('scanBtn');
-  if (scanBtn.disabled) return;
+  if (scanBtn.disabled || finalizedStatus) return;
   scanBtn.disabled = true;
   const status = document.getElementById('bioStatus');
   let stream;
   try {
     if (!detector) await loadDetector();
+    if (finalizedStatus) return;
     status.textContent = 'Accessing camera...';
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+    if (finalizedStatus) return;
     const video = document.createElement('video');
     video.srcObject = stream; video.width = 640; video.height = 480;
     await video.play();
@@ -213,6 +222,7 @@ window.captureBiometric = async function () {
     await new Promise(r => setTimeout(r, 3000));
     const faces = await detector.estimateFaces(video);
     stream.getTracks().forEach(t => t.stop());
+    if (finalizedStatus) return;
     if (faces.length === 0) { status.textContent = 'No face detected. Try again.'; scanBtn.disabled = false; return; }
     biometricFeatures = extractFaceFeatures(faces[0]);
     biometricCaptured = true;
@@ -221,17 +231,23 @@ window.captureBiometric = async function () {
     await doSign();
   } catch (e) {
     log('Error: ' + e.message);
-    status.textContent = 'Error. Try again.';
-    scanBtn.disabled = false;
+    if (!finalizedStatus) {
+      status.textContent = 'Error. Try again.';
+      scanBtn.disabled = false;
+    }
   } finally {
     if (stream) stream.getTracks().forEach(t => t.stop());
     biometricFeatures = null;
     biometricCaptured = false;
+    if (finalizedStatus) {
+      status.textContent = 'Agreement finalized.';
+      renderStatus(finalizedStatus);
+    }
   }
 };
 
 async function doSign() {
-  if (signingInProgress) return;
+  if (signingInProgress || finalizedStatus) return;
   if (!biometricCaptured) { log('Capture your face first'); return; }
   const scanBtn = document.getElementById('scanBtn');
   if (scanBtn) scanBtn.disabled = true;
@@ -247,6 +263,10 @@ async function doSign() {
     const hex = currentHash.map(b => b.toString(16).padStart(2, '0')).join('');
     input = { contract_hash_lo: BigInt('0x' + hex.slice(0, 32)).toString(), contract_hash_hi: BigInt('0x' + hex.slice(32)).toString(), signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(), timestamp: Date.now().toString() };
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
+    if (finalizedStatus) {
+      log('Agreement already finalized — no signature submitted.');
+      return;
+    }
     const payload = grothPayload(proof, publicSignals);
     log('Proof generated — awaiting on-chain verification');
     const keyCommitment = '0x' + Buffer.from(payload.keyCommitment).toString('hex');
@@ -265,9 +285,13 @@ async function doSign() {
     statusRevision++;
     showTransaction(transaction);
     if (data.statusUnavailable === true) {
-      log('Signature confirmed on-chain; agreement status is temporarily unavailable.', 'success');
-      document.getElementById('progress').textContent = 'Signature confirmed — threshold status unavailable';
-      if (scanBtn) scanBtn.textContent = 'Signed ✓ — check transaction for status';
+      if (finalizedStatus) {
+        log('Signature confirmed on-chain; agreement finalized.', 'success');
+      } else {
+        log('Signature confirmed on-chain; agreement status is temporarily unavailable.', 'success');
+        document.getElementById('progress').textContent = 'Signature confirmed — threshold status unavailable';
+        if (scanBtn) scanBtn.textContent = 'Signed ✓ — check transaction for status';
+      }
       return;
     }
     validateStatus(data, 1);
@@ -275,12 +299,14 @@ async function doSign() {
     log('Signed on-chain — identity concealed', 'success');
     if (data.finalized) {
       log('Threshold reached. Agreement finalized anonymously.', 'success');
-    } else {
+    } else if (!finalizedStatus) {
       if (scanBtn) scanBtn.textContent = 'Signed ✓ — you have co-signed';
     }
   } catch (e) {
     log('Failed: ' + e.message);
-    if (transaction) {
+    if (finalizedStatus) {
+      renderStatus(finalizedStatus);
+    } else if (transaction) {
       document.getElementById('progress').textContent = 'Transaction receipt received — agreement status unavailable';
       if (scanBtn) scanBtn.textContent = 'Check transaction before signing again';
     } else if (submitting) {
@@ -292,6 +318,7 @@ async function doSign() {
     signingKey = null;
     signingInProgress = false;
     // A known confirmed submission must not invite an automatic duplicate retry.
-    if (scanBtn) scanBtn.disabled = Boolean(transaction);
+    if (finalizedStatus) renderStatus(finalizedStatus);
+    else if (scanBtn) scanBtn.disabled = Boolean(transaction);
   }
 }

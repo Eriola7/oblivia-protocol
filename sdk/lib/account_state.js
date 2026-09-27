@@ -56,4 +56,25 @@ function createAccountReaders(anchor) {
     return { readContractAccount, readMultisigAccount };
 }
 
-module.exports = { createAccountReaders };
+// Initialization is not idempotent on-chain. Another caller can initialize the
+// PDA after our first read but before our transaction. Send only once, then
+// recover only when a fresh read proves the exact requested state now exists.
+// A null receipt means the account is usable, not that our transaction succeeded.
+async function initializeOrReadExisting({ initialize, fetchAccount, readAccount }) {
+    try {
+        return await initialize();
+    } catch (initializationError) {
+        let info;
+        try {
+            info = await fetchAccount();
+        } catch (_) {
+            throw initializationError;
+        }
+        // Keep decoding/configuration failures visible. An absent or merely
+        // prefunded account cannot establish successful initialization.
+        if (!readAccount(info)) throw initializationError;
+        return null;
+    }
+}
+
+module.exports = { createAccountReaders, initializeOrReadExisting };

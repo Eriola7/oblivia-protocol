@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const { Keypair } = require('@solana/web3.js');
-const { createAccountReaders } = require('../sdk/lib/account_state');
+const { createAccountReaders, initializeOrReadExisting } = require('../sdk/lib/account_state');
 const { readContractAccount, readMultisigAccount } = createAccountReaders(require('@coral-xyz/anchor'));
 const { contractHash, contractPda, prefundedAccount, contractAccount, multisigAccount } = require('./helpers/account_fixtures');
 
@@ -58,13 +58,35 @@ test('account decoder rejects mismatched types, truncated data and inconsistent 
     ]) assert.throws(() => readMultisigAccount(info, contractPda), /account|integer|count/i);
 });
 
-function anchorHelper(file, accountLookup) {
+test('initialization recovery reads once after failure and never fabricates a receipt', async () => {
+    const original = new Error('initialization failed');
+    let sends = 0;
+    let reads = 0;
+    const options = {
+        initialize: async () => { sends++; throw original; },
+        fetchAccount: async () => { reads++; return contractAccount(); },
+        readAccount: info => readContractAccount(info, contractHash),
+    };
+    assert.equal(await initializeOrReadExisting(options), null);
+    assert.equal(sends, 1);
+    assert.equal(reads, 1);
+    assert.equal(await initializeOrReadExisting({ ...options, initialize: async () => 'real-transaction' }), 'real-transaction');
+    assert.equal(reads, 1, 'successful initialization needs no recovery lookup');
+    for (const info of [null, prefundedAccount()]) {
+        await assert.rejects(initializeOrReadExisting({ ...options, fetchAccount: async () => info }), error => error === original);
+    }
+    await assert.rejects(initializeOrReadExisting({ ...options, fetchAccount: async () => { throw new Error('lookup failed'); } }), error => error === original);
+    const malformed = { ...await contractAccount(), data: Buffer.alloc(1) };
+    await assert.rejects(initializeOrReadExisting({ ...options, fetchAccount: async () => malformed }), /Invalid Contract account size/);
+});
+
+function anchorHelper(file, accountLookup, transact = async name => name + '-transaction') {
     const filename = path.join(__dirname, '..', file);
     const nativeRequire = createRequire(filename);
     const calls = [];
     const payer = Keypair.generate(); // Offline, synthetic payer only.
-    const method = name => () => ({ accounts: () => {
-        const builder = { signers: () => builder, rpc: async () => { calls.push(name); return name + '-transaction'; } };
+    const method = name => (...args) => ({ accounts: () => {
+        const builder = { signers: () => builder, rpc: async () => { calls.push(name); return transact(name, args); } };
         return builder;
     } });
     const program = { methods: { registerContract: method('register'), createMultisig: method('create') } };
@@ -82,6 +104,66 @@ function anchorHelper(file, accountLookup) {
 }
 
 for (const file of ['anchor_integration.js', 'sdk/lib/anchor_integration.js']) {
+    test(file + ' recovers concurrent initialization with exact accounts and no invented transaction', async () => {
+        for (const operation of ['register', 'create']) {
+            const initialized = operation === 'register' ? await contractAccount() : await multisigAccount();
+            let stored = null;
+            let arrivals = 0;
+            let release;
+            const barrier = new Promise(resolve => { release = resolve; });
+            const lookup = async () => {
+                const observed = stored;
+                if (!observed) {
+                    if (++arrivals === 2) release();
+                    await barrier;
+                }
+                return observed;
+            };
+            const transact = async name => {
+                assert.equal(name, operation);
+                if (stored) throw new Error('account already in use');
+                stored = initialized;
+                return 'winning-initialization';
+            };
+            // Independent synthetic payers model different registration
+            // transactions, not identical-transaction RPC deduplication.
+            const clients = [anchorHelper(file, lookup, transact), anchorHelper(file, lookup, transact)];
+            const results = await Promise.all(clients.map(client => operation === 'register'
+                ? client.methods.registerContract(contractHash)
+                : client.methods.createMultisig(contractHash, 2, 3)));
+            assert.deepEqual(results.map(result => result.tx).sort(), [null, 'winning-initialization'].sort());
+            for (const client of clients) assert.deepEqual(client.calls, [operation], 'only one send per client');
+        }
+    });
+
+    test(file + ' preserves genuine initialization failures and rejects conflicting race winners', async () => {
+        const original = new Error('sponsor could not initialize');
+        for (const operation of ['register', 'create']) {
+            const malformed = { ...await contractAccount(), owner: Keypair.generate().publicKey };
+            const conflicting = operation === 'register'
+                ? await contractAccount({ contract_hash: Array(32).fill(9) })
+                : await multisigAccount({ threshold: 1 });
+            for (const recovery of [null, prefundedAccount(), 'lookup failure', malformed, conflicting]) {
+                let reads = 0;
+                const helper = anchorHelper(file, async () => {
+                    if (++reads === 1) return null;
+                    if (recovery === 'lookup failure') throw new Error('RPC unavailable');
+                    return recovery;
+                }, async () => { throw original; });
+                const result = operation === 'register'
+                    ? helper.methods.registerContract(contractHash)
+                    : helper.methods.createMultisig(contractHash, 2, 3);
+                if (recovery === malformed || recovery === conflicting) {
+                    await assert.rejects(result, /owner|does not match|different multisig settings/);
+                } else {
+                    await assert.rejects(result, error => error === original);
+                }
+                assert.equal(reads, 2);
+                assert.deepEqual(helper.calls, [operation]);
+            }
+        }
+    });
+
     test(file + ' initializes prefunded PDAs and only reuses decoded initialized accounts', async () => {
         for (const info of [null, prefundedAccount()]) {
             const helper = anchorHelper(file, async () => info);

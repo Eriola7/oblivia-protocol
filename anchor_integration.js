@@ -2,7 +2,7 @@ require('dotenv').config();
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
 const { validateMultisigConfig, assertMultisigConfig } = require('./sdk/lib/multisig_config');
-const { createAccountReaders } = require('./sdk/lib/account_state');
+const { createAccountReaders, initializeOrReadExisting } = require('./sdk/lib/account_state');
 const { readContractAccount, readMultisigAccount } = createAccountReaders(anchor);
 
 const PROGRAM_ID = new PublicKey('HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG');
@@ -80,16 +80,24 @@ async function registerContract(contractHash) {
     }
 
     console.log('Registering contract on-chain...');
-    const tx = await program.methods
-        .registerContract(Array.from(contractHashBytes))
-        .accounts({
-            registry: registryPda,
-            contract: contractPda,
-            payer: keypair.publicKey,
-            systemProgram: anchor.web3.SystemProgram.programId,
-        })
-        .signers([keypair])
-        .rpc();
+    const tx = await initializeOrReadExisting({
+        initialize: () => program.methods
+            .registerContract(Array.from(contractHashBytes))
+            .accounts({
+                registry: registryPda,
+                contract: contractPda,
+                payer: keypair.publicKey,
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([keypair])
+            .rpc(),
+        fetchAccount: () => connection.getAccountInfo(contractPda),
+        readAccount: info => readContractAccount(info, contractHashBytes),
+    });
+    if (tx === null) {
+        console.log('Contract now registered on-chain:', contractPda.toString());
+        return { contractPda, tx: null };
+    }
 
     console.log('Contract registered. Transaction:', tx);
     console.log('Explorer: https://explorer.solana.com/tx/' + tx + '?cluster=devnet');
@@ -258,11 +266,23 @@ async function createMultisig(contractHash, threshold, maxSigners) {
         return { multisigPda, tx: null };
     }
 
-    const tx = await program.methods
-        .createMultisig(Array.from(contractHashBytes), threshold, maxSigners)
-        .accounts({ contract: contractPda, multisig: multisigPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
-        .signers([keypair])
-        .rpc();
+    const tx = await initializeOrReadExisting({
+        initialize: () => program.methods
+            .createMultisig(Array.from(contractHashBytes), threshold, maxSigners)
+            .accounts({ contract: contractPda, multisig: multisigPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
+            .signers([keypair])
+            .rpc(),
+        fetchAccount: () => connection.getAccountInfo(multisigPda),
+        readAccount: info => {
+            const account = readMultisigAccount(info, contractPda);
+            if (account) assertMultisigConfig(account, threshold, maxSigners);
+            return account;
+        },
+    });
+    if (tx === null) {
+        console.log('MultiSig now exists on-chain:', multisigPda.toString());
+        return { multisigPda, tx: null };
+    }
 
     console.log('MultiSig created. Transaction:', tx);
     console.log('Explorer: https://explorer.solana.com/tx/' + tx + '?cluster=devnet');

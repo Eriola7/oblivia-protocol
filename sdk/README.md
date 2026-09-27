@@ -6,7 +6,7 @@ MIT licensed. No protocol fee or token. Direct SDK transactions require a fee pa
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 22.14.0+ (matches the repository setup and supports the locked dependencies' CommonJS-to-ESM imports)
 - A Solana keypair with devnet SOL (set `OBLIVIA_DEVNET_KEY` in a `.env` file as a hex-encoded secret key)
 
 ## Install
@@ -66,7 +66,7 @@ await oblivia.signMultiSig(signer2Features, contractData);
 | `finalizeMultiSigContract(contractData)` | Normally unnecessary because signing auto-finalizes. Returns a `null` transaction if already finalized; fails below threshold. |
 | `initializeRegistry()` | One-time registry initialization (already done on devnet). |
 
-Full TypeScript definitions ship with the package (`index.d.ts`).
+TypeScript definitions ship for the Node entry point (`index.d.ts`) and the separate browser entry point (`browser.d.ts`). Import browser proving helpers from `@oblivia/sdk/browser`; they take explicit proving-asset URLs and do not expose the Node transaction-submission methods.
 
 Contract data accepts a UTF-8 string or exact `Uint8Array` bytes. The Node entry point returns byte arrays for hashes and commitments. The separate `@oblivia/sdk/browser` entry point exposes local proving helpers, not the Node submission API; its `deriveKey` returns the key string directly.
 

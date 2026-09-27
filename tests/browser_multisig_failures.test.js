@@ -15,6 +15,19 @@ const proof = {
     publicSignals: ['9', '10', '11', '12'],
 };
 const response = (data, ok = true) => ({ ok, json: async () => data });
+const finalized = { collected: 2, threshold: 2, finalized: true };
+
+function deferred() {
+    let resolve, reject;
+    const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+    return { promise, resolve, reject };
+}
+
+function assertFinalized(b) {
+    assert.equal(b.get('progress').textContent, '2 of 2 signed — FINALIZED ✓');
+    assert.equal(b.get('scanBtn').textContent, 'Agreement Finalized');
+    assert.equal(b.get('scanBtn').disabled, true);
+}
 
 function element() {
     const listeners = new Map();
@@ -49,7 +62,9 @@ function browser(overrides = {}) {
             location: { origin: 'https://example.test', pathname: '/multisig.html', search: '' },
             addEventListener: (_, handler) => { loaded = handler; },
         },
-        document: { getElementById: get, createElement: element },
+        document: { getElementById: get, createElement: tag => tag === 'video' && overrides.video ? overrides.video : element() },
+        navigator: { mediaDevices: { getUserMedia: overrides.getUserMedia } },
+        setTimeout: resolve => resolve(),
         Buffer, Uint8Array, TextEncoder, URLSearchParams,
         fetch: async (url, options) => {
             calls.requests.push({ url, options });
@@ -233,6 +248,129 @@ test('overlapping status requests only apply the latest response', async () => {
     await first;
     assert.match(b.get('progress').textContent, /2 of 2 signed — FINALIZED/);
     assert.equal(b.get('scanBtn').disabled, true);
+});
+
+test('finalization observed during proof generation prevents submission and survives proof failure', async () => {
+    for (const proofFails of [false, true]) {
+        const statusReply = deferred();
+        const proofReply = deferred();
+        const b = browser({ prove: () => proofReply.promise, fetch: () => statusReply.promise });
+        const status = vm.runInContext('refreshStatus()', b.context);
+        const signing = b.sign();
+        statusReply.resolve(response(finalized));
+        await status;
+        assertFinalized(b);
+        if (proofFails) proofReply.reject(new Error('prover failed after finalization'));
+        else proofReply.resolve(proof);
+        await signing;
+        assertFinalized(b);
+        assert.equal(b.calls.requests.filter(call => call.options?.method === 'POST').length, 0);
+        assert.equal(b.calls.proofs[0].signer_key, '0');
+        assert.equal(b.get('txLink').children.length, 0);
+        await b.sign();
+        assert.equal(b.calls.proofs.length, 1, 'a known finalized agreement cannot start another proof');
+    }
+});
+
+test('finalization observed during a pending submission survives rejection and keeps any confirmed receipt', async () => {
+    const results = [
+        () => response({ error: 'MultisigAlreadyFinalized' }, false),
+        () => { throw new Error('confirmation connection lost'); },
+        () => response({ transaction, statusUnavailable: true }),
+        () => response({ transaction, collected: 1, threshold: 2, finalized: false }),
+        () => response({ transaction, collected: 'invalid' }),
+    ];
+    for (const result of results) {
+        const statusReply = deferred();
+        const submitReply = deferred();
+        const submitted = deferred();
+        const b = browser({ fetch: url => {
+            if (url.includes('/multisig/status/')) return statusReply.promise;
+            submitted.resolve();
+            return submitReply.promise.then(result);
+        } });
+        const status = vm.runInContext('refreshStatus()', b.context);
+        const signing = b.sign();
+        await submitted.promise;
+        statusReply.resolve(response(finalized));
+        await status;
+        assertFinalized(b);
+        submitReply.resolve();
+        await signing;
+        assertFinalized(b);
+        assert.equal(b.calls.requests.filter(call => call.options?.method === 'POST').length, 1);
+        const hasReceipt = results.indexOf(result) >= 2;
+        assert.equal(b.get('txLink').children.length, hasReceipt ? 1 : 0);
+        if (hasReceipt) {
+            assert.equal(b.get('txLink').children[0].href, `https://explorer.solana.com/tx/${transaction}?cluster=devnet`);
+        } else {
+            assert.doesNotMatch(b.logs(), /Signed on-chain|Signature confirmed|Threshold reached/);
+        }
+    }
+});
+
+test('camera and no-face cleanup preserve finalization while ordinary capture failures remain retryable', async () => {
+    for (const finalizes of [false, true]) {
+        for (const captureResult of ['camera failure', 'detector failure', 'no face', 'face']) {
+            const statusReply = deferred();
+            const captureReply = deferred();
+            const capturing = deferred();
+            let stopped = 0;
+            const b = browser({
+                fetch: () => statusReply.promise,
+                video: { play: async () => {} },
+                getUserMedia: async () => {
+                    if (captureResult === 'camera failure') {
+                        capturing.resolve();
+                        await captureReply.promise;
+                        throw new Error('camera permission denied');
+                    }
+                    return { getTracks: () => [{ stop() { stopped++; } }] };
+                },
+            });
+            b.context.estimateFaces = async () => {
+                capturing.resolve();
+                await captureReply.promise;
+                if (captureResult === 'detector failure') throw new Error('detector failed');
+                return captureResult === 'no face' ? [] : [{}];
+            };
+            vm.runInContext('detector = { estimateFaces }; extractFaceFeatures = () => Array(20).fill(0.5);', b.context);
+            const status = vm.runInContext('refreshStatus()', b.context);
+            const capture = b.context.window.captureBiometric();
+            await capturing.promise;
+            statusReply.resolve(response(finalizes ? finalized : { collected: 1, threshold: 2, finalized: false }));
+            await status;
+            // The non-finalized successful capture is tested elsewhere; this
+            // matrix checks that normal failures remain retryable.
+            if (!finalizes && captureResult === 'face') captureReply.reject(new Error('capture failed'));
+            else captureReply.resolve();
+            await capture;
+            if (finalizes) {
+                assertFinalized(b);
+                assert.equal(b.get('bioStatus').textContent, 'Agreement finalized.');
+            } else {
+                assert.equal(b.get('scanBtn').disabled, false);
+                assert.match(b.get('bioStatus').textContent, /Try again/);
+            }
+            assert.equal(b.calls.proofs.length, 0);
+            assert.equal(b.calls.requests.filter(call => call.options?.method === 'POST').length, 0);
+            assert.equal(vm.runInContext('biometricFeatures', b.context), null);
+            assert.equal(vm.runInContext('biometricCaptured', b.context), false);
+            if (captureResult !== 'camera failure') assert.ok(stopped > 0);
+        }
+    }
+});
+
+test('validated finalization is not downgraded by later non-finalized or failed status lookups', async () => {
+    for (const later of [response({ collected: 1, threshold: 2, finalized: false }), response({ error: 'unavailable' }, false)]) {
+        let reads = 0;
+        const b = browser({ fetch: async () => ++reads === 1 ? response(finalized) : later });
+        await vm.runInContext('refreshStatus()', b.context);
+        await vm.runInContext('refreshStatus()', b.context);
+        assertFinalized(b);
+        await b.sign();
+        assert.equal(b.calls.proofs.length, 0);
+    }
 });
 
 test('malformed multisig measurements cannot reach proof generation or submission', async () => {

@@ -31,11 +31,17 @@
     "snarkjs": "^0.7.6"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.14.0"
   },
   "exports": {
-    ".": "./index.js",
-    "./browser": "./browser.js"
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./browser": {
+      "types": "./browser.d.ts",
+      "default": "./browser.js"
+    }
   },
   "browser": "./browser.js"
 }

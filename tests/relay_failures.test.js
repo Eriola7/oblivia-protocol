@@ -18,7 +18,7 @@ function payload() {
     };
 }
 
-function relay({ statusFails = false, submitFails = false, accountLookup = async () => null } = {}) {
+function relay({ statusFails = false, submitFails = false, accountLookup = async () => null, transact = async () => transaction } = {}) {
     const routes = new Map();
     const app = { use() {}, get() {}, post(route, ...handlers) { routes.set(route, handlers.at(-1)); }, listen() {} };
     const express = Object.assign(() => app, { json() {}, static() {} });
@@ -27,7 +27,7 @@ function relay({ statusFails = false, submitFails = false, accountLookup = async
     const method = name => (...args) => ({ accounts: () => {
         const builder = {
             signers: () => builder,
-            rpc: async () => { calls.push(name); return transaction; },
+            rpc: async () => { calls.push(name); return transact(name, args); },
             instruction: async () => ({ keys: [], programId: payer.publicKey, data: Buffer.alloc(0) }),
         };
         if (name === 'verify') assert.deepEqual(args.slice(0, 4).map(bytes => bytes.length), [64, 128, 64, 128]);
@@ -105,6 +105,136 @@ test('relay reuses valid accounts but rejects foreign or malformed contract acco
         const failed = relay({ accountLookup: async () => invalid });
         assert.match((await failed.post('/sign', payload())).error, /account|owner/i);
         assert.deepEqual(failed.calls, ['program', 'account lookup']);
+    }
+});
+
+test('concurrent first signers recover a registration race and both reach proof verification', async () => {
+    const initialized = await contractAccount();
+    let stored = null;
+    let arrivals = 0;
+    let release;
+    const barrier = new Promise(resolve => { release = resolve; });
+    const r = relay({
+        accountLookup: async () => {
+            const observed = stored;
+            if (!observed) {
+                if (++arrivals === 2) release();
+                await barrier;
+            }
+            return observed;
+        },
+        transact: async name => {
+            if (name === 'register') {
+                if (stored) throw new Error('account already in use');
+                stored = initialized;
+            }
+            return transaction;
+        },
+    });
+    const responses = await Promise.all([
+        r.post('/sign', payload()),
+        r.post('/sign', { ...payload(), keyCommitment: '04'.repeat(32) }),
+    ]);
+    for (const response of responses) assert.equal(response.transaction, transaction);
+    assert.equal(r.calls.filter(call => call === 'register').length, 2, 'one registration attempt per request');
+    assert.equal(r.calls.filter(call => call === 'verify').length, 2);
+});
+
+test('single-sign registration failure remains a failure without a valid race winner', async () => {
+    const original = new Error('registration denied');
+    const initialized = await contractAccount();
+    for (const recovery of [
+        null, prefundedAccount(), 'lookup failure',
+        { ...initialized, owner: Keypair.generate().publicKey },
+        { ...initialized, data: Buffer.alloc(initialized.data.length) },
+        await contractAccount({ contract_hash: Array(32).fill(9) }),
+    ]) {
+        let reads = 0;
+        const r = relay({
+            accountLookup: async () => {
+                if (++reads === 1) return null;
+                if (recovery === 'lookup failure') throw new Error('lookup unavailable');
+                return recovery;
+            },
+            transact: async () => { throw original; },
+        });
+        const response = await r.post('/sign', payload());
+        assert.match(response.error, /registration denied|owner|account/i);
+        assert.equal(response.transaction, undefined);
+        assert.equal(reads, 2);
+        assert.equal(r.calls.filter(call => call === 'register').length, 1);
+        assert.ok(!r.calls.includes('verify'));
+    }
+});
+
+test('multisig creation recovers concurrent contract and multisig initialization without inventing a receipt', async () => {
+    const contract = await contractAccount();
+    const multisig = await multisigAccount();
+    for (const preinitializedContract of [false, true]) {
+        const stored = { contract: preinitializedContract ? contract : null, multisig: null };
+        const barriers = Object.fromEntries(['contract', 'multisig'].map(kind => {
+            let release;
+            const promise = new Promise(resolve => { release = resolve; });
+            return [kind, { arrivals: 0, release, promise }];
+        }));
+        const r = relay({
+            accountLookup: async address => {
+                const kind = address.equals(contractPda) ? 'contract' : 'multisig';
+                const observed = stored[kind];
+                if (!observed) {
+                    if (++barriers[kind].arrivals === 2) barriers[kind].release();
+                    await barriers[kind].promise;
+                }
+                return observed;
+            },
+            transact: async name => {
+                const kind = name === 'register' ? 'contract' : 'multisig';
+                if (stored[kind]) throw new Error('account already in use');
+                stored[kind] = kind === 'contract' ? contract : multisig;
+                return transaction;
+            },
+        });
+        const body = { contractHash: payload().contractHash, threshold: 2, maxSigners: 3 };
+        const responses = await Promise.all([r.post('/multisig/create', body), r.post('/multisig/create', body)]);
+        assert.equal(responses.filter(response => response.transaction === transaction).length, 1);
+        const recovered = responses.find(response => response.alreadyExists);
+        assert.ok(recovered);
+        assert.equal(recovered.transaction, undefined);
+        assert.equal(recovered.explorer, undefined);
+        assert.equal(responses[0].multisig, responses[1].multisig);
+        assert.equal(r.calls.filter(call => call === 'register').length, preinitializedContract ? 0 : 2);
+        assert.equal(r.calls.filter(call => call === 'create').length, 2);
+    }
+});
+
+test('multisig creation cannot recover absent, malformed, foreign or conflicting race winners', async () => {
+    const contract = await contractAccount();
+    const multisig = await multisigAccount();
+    for (const recovery of [
+        null, prefundedAccount(), 'lookup failure',
+        { ...multisig, owner: Keypair.generate().publicKey },
+        { ...multisig, data: Buffer.alloc(multisig.data.length) },
+        await multisigAccount({ contract: Keypair.generate().publicKey }),
+        await multisigAccount({ threshold: 1 }),
+        await multisigAccount({ max_signers: 4 }),
+    ]) {
+        let reads = 0;
+        const r = relay({
+            accountLookup: async address => {
+                if (address.equals(contractPda)) return contract;
+                if (++reads === 1) return null;
+                if (recovery === 'lookup failure') throw new Error('lookup unavailable');
+                return recovery;
+            },
+            transact: async () => { throw new Error('creation denied'); },
+        });
+        const response = await r.post('/multisig/create', { contractHash: payload().contractHash, threshold: 2, maxSigners: 3 });
+        assert.match(response.error, /creation denied|owner|account|different multisig settings/i);
+        assert.equal(response.alreadyExists, undefined);
+        assert.equal(response.transaction, undefined);
+        assert.equal(reads, 2);
+        assert.equal(r.calls.filter(call => call === 'create').length, 1);
+        assert.ok(!r.calls.includes('register'));
     }
 });
 

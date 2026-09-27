@@ -5,7 +5,7 @@ const cors = require('cors');
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
 const { validateMultisigConfig, assertMultisigConfig } = require('../sdk/lib/multisig_config');
-const { createAccountReaders } = require('../sdk/lib/account_state');
+const { createAccountReaders, initializeOrReadExisting } = require('../sdk/lib/account_state');
 const { readContractAccount, readMultisigAccount } = createAccountReaders(anchor);
 
 const app = express();
@@ -114,16 +114,20 @@ app.post('/sign', limitSponsoredRequest, async (req, res) => {
         // A funded system-owned PDA still needs registration.
         const contractInfo = await connection.getAccountInfo(contractPda);
         if (!readContractAccount(contractInfo, contractHashBytes)) {
-            await program.methods
-                .registerContract(Array.from(contractHashBytes))
-                .accounts({
-                    registry: registryPda,
-                    contract: contractPda,
-                    payer: keypair.publicKey,
-                    systemProgram: anchor.web3.SystemProgram.programId,
-                })
-                .signers([keypair])
-                .rpc();
+            await initializeOrReadExisting({
+                initialize: () => program.methods
+                    .registerContract(Array.from(contractHashBytes))
+                    .accounts({
+                        registry: registryPda,
+                        contract: contractPda,
+                        payer: keypair.publicKey,
+                        systemProgram: anchor.web3.SystemProgram.programId,
+                    })
+                    .signers([keypair])
+                    .rpc(),
+                fetchAccount: () => connection.getAccountInfo(contractPda),
+                readAccount: info => readContractAccount(info, contractHashBytes),
+            });
         }
 
         // Verify and record the signature atomically. The program checks that the
@@ -174,18 +178,31 @@ app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
         // Validate existing accounts and policy before spending registration rent.
         if (existing) assertMultisigConfig(existing, threshold, maxSigners);
         if (!contract) {
-            await program.methods.registerContract(Array.from(contractHashBytes))
-                .accounts({ registry: registryPda, contract: contractPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
-                .signers([keypair]).rpc();
+            await initializeOrReadExisting({
+                initialize: () => program.methods.registerContract(Array.from(contractHashBytes))
+                    .accounts({ registry: registryPda, contract: contractPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
+                    .signers([keypair]).rpc(),
+                fetchAccount: () => connection.getAccountInfo(contractPda),
+                readAccount: info => readContractAccount(info, contractHashBytes),
+            });
         }
 
         if (existing) {
             return res.json({ alreadyExists: true, multisig: multisigPda.toString() });
         }
 
-        const tx = await program.methods.createMultisig(Array.from(contractHashBytes), threshold, maxSigners)
-            .accounts({ contract: contractPda, multisig: multisigPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
-            .signers([keypair]).rpc();
+        const tx = await initializeOrReadExisting({
+            initialize: () => program.methods.createMultisig(Array.from(contractHashBytes), threshold, maxSigners)
+                .accounts({ contract: contractPda, multisig: multisigPda, payer: keypair.publicKey, systemProgram: anchor.web3.SystemProgram.programId })
+                .signers([keypair]).rpc(),
+            fetchAccount: () => connection.getAccountInfo(multisigPda),
+            readAccount: info => {
+                const account = readMultisigAccount(info, contractPda);
+                if (account) assertMultisigConfig(account, threshold, maxSigners);
+                return account;
+            },
+        });
+        if (tx === null) return res.json({ alreadyExists: true, multisig: multisigPda.toString() });
 
         res.json({ transaction: tx, multisig: multisigPda.toString(), explorer: 'https://explorer.solana.com/tx/' + tx + '?cluster=devnet' });
     } catch (e) { res.json({ error: e.message }); }
