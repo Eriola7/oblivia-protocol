@@ -18,7 +18,7 @@ function payload() {
     };
 }
 
-function relay({ statusFails = false, submitFails = false, accountLookup = async () => null, transact = async () => transaction } = {}) {
+function relay({ statusFails = false, submitFails = false, accountLookup = async () => null, transact = async () => transaction, mockSponsor = true, env = {}, programFailure = null } = {}) {
     const routes = new Map();
     const app = { use() {}, get() {}, post(route, ...handlers) { routes.set(route, handlers.at(-1)); }, listen() {} };
     const express = Object.assign(() => app, { json() {}, static() {} });
@@ -48,19 +48,28 @@ function relay({ statusFails = false, submitFails = false, accountLookup = async
     };
     const context = vm.createContext({
         require: name => name === 'express' ? express : name === 'dotenv' ? { config() {} } : nativeRequire(name),
-        __dirname: path.dirname(filename), process: { env: {} }, Buffer, console: { log() {} }, program, payer, calls, accountLookup,
+        __dirname: path.dirname(filename), process: { env }, Buffer, console: { log() {}, error() {} }, program, payer, calls, accountLookup, programFailure,
     });
     vm.runInContext(fs.readFileSync(filename, 'utf8'), context);
+    if (mockSponsor) vm.runInContext('getProgram = () => { calls.push("program"); if (programFailure) throw programFailure; return { program, keypair: payer }; };', context);
     vm.runInContext(`
-        getProgram = () => { calls.push('program'); return { program, keypair: payer }; };
         connection.getAccountInfo = async address => { calls.push('account lookup'); return accountLookup(address); };
     `, context);
+    async function postResponse(route, body) {
+        let response;
+        let status = 200;
+        const res = {
+            status(code) { status = code; return this; },
+            json(value) { response = value; return this; },
+        };
+        await routes.get(route)({ body }, res);
+        return { status, body: response };
+    }
     return {
         calls,
+        postResponse,
         async post(route, body) {
-            let response;
-            await routes.get(route)({ body }, { json: value => { response = value; } });
-            return response;
+            return (await postResponse(route, body)).body;
         },
     };
 }
@@ -69,8 +78,9 @@ test('single-sign relay rejects every malformed proof field before touching acco
     for (const field of ['proofA', 'proofB', 'proofC', 'publicInputs']) {
         for (const invalid of [[], undefined, 'bad', Array(payload()[field].length).fill(256), Array(payload()[field].length).fill(0.5)]) {
             const r = relay();
-            const response = await r.post('/sign', { ...payload(), [field]: invalid });
-            assert.match(response.error, new RegExp(field + ' must be an array'));
+            const response = await r.postResponse('/sign', { ...payload(), [field]: invalid });
+            assert.equal(response.status, 400);
+            assert.match(response.body.error, new RegExp(field + ' must be an array'));
             assert.deepEqual(r.calls, []);
         }
     }
@@ -264,7 +274,9 @@ test('multisig relay validates the existing multisig before spending contract re
 
 test('multisig relay preserves a confirmed receipt when the subsequent state read fails', async () => {
     const r = relay({ statusFails: true });
-    const response = await r.post('/multisig/sign', payload());
+    const result = await r.postResponse('/multisig/sign', payload());
+    assert.equal(result.status, 200);
+    const response = result.body;
     assert.equal(response.transaction, transaction);
     assert.equal(response.statusUnavailable, true);
     assert.equal(response.error, undefined);
@@ -272,6 +284,95 @@ test('multisig relay preserves a confirmed receipt when the subsequent state rea
     assert.equal(response.finalized, undefined, 'do not invent a threshold result');
     assert.equal(response.explorer, `https://explorer.solana.com/tx/${transaction}?cluster=devnet`);
     assert.deepEqual(r.calls, ['program', 'confirmed', 'status']);
+});
+
+test('every sponsored endpoint rejects invalid bodies before loading the sponsor or reading accounts', async () => {
+    for (const route of ['/sign', '/multisig/create', '/multisig/sign']) {
+        for (const body of [undefined, null, [], 'not an object', 7, true]) {
+            const r = relay();
+            const response = await r.postResponse(route, body);
+            assert.equal(response.status, 400, route);
+            assert.equal(typeof response.body.error, 'string');
+            assert.deepEqual(r.calls, [], route);
+        }
+    }
+});
+
+test('all signing fields reject malformed bytes and commitments before sponsor or RPC calls', async () => {
+    for (const route of ['/sign', '/multisig/sign']) {
+        for (const field of ['contractHash', 'proofA', 'proofB', 'proofC', 'publicInputs']) {
+            const size = payload()[field].length;
+            const invalidValues = [null, '01'.repeat(size), Array(size - 1).fill(0), Array(size + 1).fill(0),
+                Array(size).fill(-1), Array(size).fill(256), Array(size).fill(0.5), Array(size).fill(null), Array(size)];
+            for (const invalid of invalidValues) {
+                const r = relay();
+                const response = await r.postResponse(route, { ...payload(), [field]: invalid });
+                assert.equal(response.status, 400, `${route}: ${field}`);
+                assert.match(response.body.error, new RegExp(field));
+                assert.deepEqual(r.calls, [], `${route}: ${field}`);
+            }
+        }
+        for (const field of ['keyCommitment', 'signatureCommitment']) {
+            for (const invalid of [null, [], 7, 'ab'.repeat(31), 'ab'.repeat(33), 'zz'.repeat(32)]) {
+                const r = relay();
+                const response = await r.postResponse(route, { ...payload(), [field]: invalid });
+                assert.equal(response.status, 400, `${route}: ${field}`);
+                assert.match(response.body.error, new RegExp(field));
+                assert.deepEqual(r.calls, [], `${route}: ${field}`);
+            }
+        }
+    }
+});
+
+test('multisig creation uses HTTP 400 for invalid configuration and 409 for existing policy conflicts', async () => {
+    const validBody = { contractHash: payload().contractHash, threshold: 2, maxSigners: 3 };
+    for (const overrides of [{ threshold: 0 }, { threshold: 2.5 }, { threshold: '2' }, { threshold: 4 },
+        { maxSigners: 256 }, { maxSigners: 1 }, { maxSigners: null }, { contractHash: Array(33).fill(1) }]) {
+        const r = relay();
+        const response = await r.postResponse('/multisig/create', { ...validBody, ...overrides });
+        assert.equal(response.status, 400);
+        assert.equal(typeof response.body.error, 'string');
+        assert.deepEqual(r.calls, []);
+    }
+    const contract = await contractAccount();
+    const conflicting = await multisigAccount({ threshold: 1 });
+    const r = relay({ accountLookup: async address => address.equals(contractPda) ? contract : conflicting });
+    const response = await r.postResponse('/multisig/create', validBody);
+    assert.equal(response.status, 409);
+    assert.match(response.body.error, /different multisig settings/);
+    assert.deepEqual(r.calls, ['program', 'account lookup', 'account lookup']);
+});
+
+test('misconfigured sponsors return sanitized HTTP 503 without touching RPC', async () => {
+    for (const env of [{}, { OBLIVIA_DEVNET_KEY: 'INVALID_DUMMY_SECRET_MUST_NOT_BE_ECHOED' }]) {
+        for (const [route, body] of [['/sign', payload()], ['/multisig/sign', payload()],
+            ['/multisig/create', { contractHash: payload().contractHash, threshold: 2, maxSigners: 3 }]]) {
+            const r = relay({ mockSponsor: false, env });
+            const response = await r.postResponse(route, body);
+            assert.equal(response.status, 503);
+            assert.equal(typeof response.body.error, 'string');
+            assert.doesNotMatch(response.body.error, /INVALID_DUMMY_SECRET|secret key|Buffer|undefined/);
+            assert.deepEqual(r.calls, []);
+        }
+    }
+});
+
+test('upstream failures are HTTP 502 regardless of their message and unexpected local failures stay HTTP 500', async () => {
+    const upstream = new TypeError('fetch failed');
+    upstream.cause = Object.assign(new Error('connection reset'), { code: 'ECONNRESET' });
+    for (const error of [upstream, new Error('arbitrary upstream message')]) {
+        const r = relay({ accountLookup: async () => { throw error; } });
+        const response = await r.postResponse('/sign', payload());
+        assert.equal(response.status, 502);
+        assert.equal(typeof response.body.error, 'string');
+        assert.equal(response.body.transaction, undefined);
+        assert.deepEqual(r.calls, ['program', 'account lookup']);
+    }
+    const r = relay({ programFailure: new Error('unexpected private implementation detail') });
+    const response = await r.postResponse('/sign', payload());
+    assert.equal(response.status, 500);
+    assert.equal(response.body.error, 'Relay request failed');
+    assert.deepEqual(r.calls, ['program']);
 });
 
 test('multisig relay still returns valid threshold state and distinguishes a failed submission', async () => {
