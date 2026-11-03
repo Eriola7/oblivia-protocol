@@ -1,4 +1,3 @@
-require('dotenv').config(); require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
 const { validateMultisigConfig, assertMultisigConfig } = require('./multisig_config');
@@ -14,8 +13,13 @@ const SIGNATURE_SEED = Buffer.from('oblivia_signature');
 
 const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 
+// A library must not load .env files into its host process; the application
+// owns its environment (e.g. `node --env-file=.env app.js` or dotenv).
 function getKeypair() {
     const secretHex = process.env.OBLIVIA_DEVNET_KEY;
+    if (typeof secretHex !== 'string' || !/^[0-9a-fA-F]{128}$/.test(secretHex)) {
+        throw new Error('OBLIVIA_DEVNET_KEY must be set to a 64-byte hex-encoded Solana secret key to submit transactions');
+    }
     return Keypair.fromSecretKey(Buffer.from(secretHex, 'hex'));
 }
 

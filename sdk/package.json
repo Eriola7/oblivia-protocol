@@ -1,38 +1,32 @@
 {
   "name": "@oblivia/sdk",
   "version": "0.1.0",
-  "description": "Development SDK for contract-bound, anonymous Groth16 signing on Solana Devnet. Not audited for production use.",
-  "main": "index.js",
-  "scripts": {
-    "test:proof": "node scripts/check-proof.js"
-  },
-  "types": "index.d.ts",
+  "description": "Contract-bound anonymous Groth16 signing on Solana Devnet. On-chain ZK verification and contract binding; key management via passkeys or wallets. Not audited for production use.",
+  "keywords": [
+    "solana",
+    "zero-knowledge",
+    "zk",
+    "groth16",
+    "signing",
+    "anonymous",
+    "passkey",
+    "webauthn",
+    "contracts",
+    "anchor"
+  ],
   "license": "MIT",
+  "homepage": "https://github.com/Eriola7/oblivia-protocol/tree/main/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Eriola7/oblivia-protocol/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Eriola7/oblivia-protocol.git",
     "directory": "sdk"
   },
-  "keywords": [
-    "solana",
-    "zero-knowledge",
-    "zk",
-    "signing",
-    "anonymous",
-    "biometric",
-    "contracts",
-    "anchor"
-  ],
-  "dependencies": {
-    "@coral-xyz/anchor": "^0.32.1",
-    "@noble/hashes": "^1.8.0",
-    "@solana/web3.js": "^1.98.4",
-    "dotenv": "^17.4.2",
-    "snarkjs": "^0.7.6"
-  },
-  "engines": {
-    "node": ">=22.14.0"
-  },
+  "main": "index.js",
+  "types": "index.d.ts",
+  "browser": "./browser.js",
   "exports": {
     ".": {
       "types": "./index.d.ts",
@@ -43,5 +37,31 @@
       "default": "./browser.js"
     }
   },
-  "browser": "./browser.js"
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "browser.js",
+    "browser.d.ts",
+    "lib/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:proof": "node scripts/check-proof.js",
+    "prepublishOnly": "npm test"
+  },
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@noble/hashes": "^1.8.0",
+    "@solana/web3.js": "^1.98.4",
+    "snarkjs": "^0.7.6"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

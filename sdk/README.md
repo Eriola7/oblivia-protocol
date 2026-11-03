@@ -1,92 +1,108 @@
 # Oblivia SDK
 
-Development SDK for contract-bound, anonymous signing on Solana Devnet. This is not an audited production SDK; proof verification does not establish a signer's legal identity or an agreement's legal enforceability.
+Development SDK for contract-bound, anonymous signing on Solana Devnet: on-chain Groth16 verification plus contract binding. It is not an audited production SDK; proof verification does not establish a signer's legal identity or an agreement's legal enforceability.
+
+Oblivia does not manage keys. You supply a signer secret from a standard key store: a passkey in the browser, or a wallet / device seed / KMS secret on a server. Backup and recovery are whatever that key store provides.
 
 MIT licensed. No protocol fee or token. Direct SDK transactions require a fee payer with Devnet SOL.
 
 ## Requirements
 
 - Node.js 22.14.0+ (matches the repository setup and supports the locked dependencies' CommonJS-to-ESM imports)
-- A Solana keypair with devnet SOL (set `OBLIVIA_DEVNET_KEY` in a `.env` file as a hex-encoded secret key)
+- For on-chain submission only: a Solana keypair with Devnet SOL in `OBLIVIA_DEVNET_KEY` (hex-encoded 64-byte secret key). The SDK does not read `.env` files; load your environment yourself, e.g. `node --env-file=.env app.js`.
 
 ## Install
 
-Use the checked-out SDK; these examples do not assume an npm publication:
-
 ```bash
-git clone https://github.com/Eriola7/oblivia-protocol.git
-cd oblivia-protocol/sdk && npm install
+npm install @oblivia/sdk
 ```
 
-## Quick Start
+No monorepo clone is needed. Proof generation works offline; only submission needs RPC access and a fee payer.
+
+## Quick start (Node)
 
 ```javascript
-// Run from the repository's sdk directory.
-const oblivia = require('./index.js');
+const oblivia = require('@oblivia/sdk');
 
-// 20 normalized biometric measurements (facial geometry ratios).
-// The reference browser client obtains these from local face capture.
-const biometricFeatures = [/* 20 values between 0 and 1 */];
+// Create once, then keep it in your own key store (OS keychain, KMS, wallet).
+const signerSecret = oblivia.generateSignerSecret(); // Uint8Array(32)
 
-// Sign a contract — derives key, generates ZK proof, registers
-// on-chain, submits commitments, verifies. One call.
-const result = await oblivia.signContract(biometricFeatures, 'Contract text or bytes');
+// Derive key -> generate and locally verify a ZK proof -> register the contract
+// -> verify the proof on-chain and record the signature, in one call.
+const result = await oblivia.signContract(signerSecret, 'Contract text or bytes');
 
 console.log(result.verified);          // true
-console.log(result.identityRevealed);  // false — always
-console.log(result.dataTransmitted);   // false refers to biometric data, not the proof
+console.log(result.identityRevealed);  // false
 console.log(result.transaction);       // confirmed Devnet transaction signature
-console.log(result.keyCommitment);     // 32-byte number[] commitment
+console.log(result.keyCommitment);     // 32-byte public commitment to your signer key
 ```
 
-## Anonymous Multi-Signature
+## Quick start (browser, passkey)
+
+Face ID / Touch ID / the device PIN unlocks a standard passkey. The passkey's WebAuthn PRF output is the signer secret. Passkeys sync through iCloud Keychain or Google Password Manager, so a new device signed into the same account restores the same signer. Oblivia never sees biometric data.
+
+```javascript
+import { createSignerPasskey, getPasskeySecret, generateProof } from '@oblivia/sdk/browser';
+
+await createSignerPasskey({ rpName: 'My App' });   // once per user
+const secret = await getPasskeySecret();            // prompts Face ID / Touch ID
+const result = await generateProof(secret, contractText, {
+  wasmUrl: '/proving/oblivia.wasm',
+  zkeyUrl: '/proving/oblivia_1.zkey',
+});
+secret.fill(0);
+// Submit result through your relay; see browser-client/ in the repository.
+```
+
+Passkey providers without WebAuthn PRF support fail closed with `PasskeyUnavailableError`.
+
+## Anonymous multi-signature
 
 ```javascript
 // Create a 2-of-3 multisig contract on-chain
 await oblivia.createMultiSigContract(contractData, 2, 3);
 
-// Each signer signs independently — same key cannot sign twice
-// (enforced on-chain by PDA deduplication)
-await oblivia.signMultiSig(signer1Features, contractData);
-await oblivia.signMultiSig(signer2Features, contractData);
+// Each signer signs with their own secret. The same key cannot be counted twice
+// (enforced on-chain by PDA deduplication).
+await oblivia.signMultiSig(signer1Secret, contractData);
+await oblivia.signMultiSig(signer2Secret, contractData);
 
 // The second signature automatically finalizes this 2-of-3 agreement.
-// No additional finalization transaction is required.
 ```
+
+**Deduplication is per key, not per person.** One person holding several secrets can sign several times. If your agreement needs one-person-one-signature, restrict which key commitments may participate in your application.
 
 ## API
 
 | Function | Description |
 |---|---|
-| `deriveKey(biometricFeatures)` | Returns `{ key, sketch }`, both hex strings, derived locally. Stability and uniqueness are not established guarantees. |
-| `generateProof(biometricFeatures, contractData)` | Generate a ZK proof binding the key to a specific contract and timestamp. |
-| `signContract(biometricFeatures, contractData)` | Full pipeline: key → proof → register → submit → verify on-chain. |
+| `generateSignerSecret()` | Fresh 32-byte secret for server or test signers. Store it yourself. |
+| `deriveSignerKey(signerSecret)` | Deterministic private circuit input (decimal 248-bit field element). |
+| `generateProof(signerSecret, contractData)` | Generate and locally verify a proof binding the key to the full contract hash and a timestamp. |
+| `signContract(signerSecret, contractData)` | Full pipeline: key → proof → register → verify and record on-chain. |
 | `createMultiSigContract(contractData, threshold, maxSigners)` | Returns the contract hash, settings, multisig address and transaction; transaction is `null` if the matching configuration already exists. |
-| `signMultiSig(biometricFeatures, contractData)` | Returns commitments, contract hash and a confirmed transaction. It does not fetch or return a `state` object. Deduplication is per key, not per person. |
+| `signMultiSig(signerSecret, contractData)` | Returns commitments, contract hash and a confirmed transaction. It does not fetch or return a `state` object. |
 | `finalizeMultiSigContract(contractData)` | Normally unnecessary because signing auto-finalizes. Returns a `null` transaction if already finalized; fails below threshold. |
-| `initializeRegistry()` | One-time registry initialization (already done on devnet). |
+| `initializeRegistry()` | One-time registry initialization (already done on Devnet). |
 
-TypeScript definitions ship for the Node entry point (`index.d.ts`) and the separate browser entry point (`browser.d.ts`). Import browser proving helpers from `@oblivia/sdk/browser`; they take explicit proving-asset URLs and do not expose the Node transaction-submission methods.
+Browser entry point (`@oblivia/sdk/browser`): `createSignerPasskey`, `getPasskeySecret`, `deriveSignerKey`, `generateProof`, `PasskeyUnavailableError`. It takes explicit proving-asset URLs and does not expose the Node submission methods.
 
-Contract data accepts a UTF-8 string or exact `Uint8Array` bytes. The Node entry point returns byte arrays for hashes and commitments. The separate `@oblivia/sdk/browser` entry point exposes local proving helpers, not the Node submission API; its `deriveKey` returns the key string directly.
+`signerSecret` must be a `Uint8Array` (or `Buffer`) of at least 32 bytes and not all zeros; anything else is rejected before proving. Contract data accepts a UTF-8 string or exact `Uint8Array` bytes. TypeScript definitions ship for both entry points.
 
-Biometric features must be a dense JavaScript array of exactly 20 finite numbers in the inclusive range `[0, 1]`. Empty or sparse arrays, non-numeric values, and out-of-range measurements are rejected before proving. Invalid captures must be repeated, not clamped or coerced into a signing key. Input validation does not establish biometric entropy, liveness, or uniqueness.
+## How it works
 
-## How It Works
+1. **Secret → key.** `SHA-256("oblivia/signer-key/v1" ‖ 0x00 ‖ secret)`, truncated to 248 bits so it always fits the BN254 field.
+2. **Key → proof.** A Circom Groth16 circuit proves knowledge of the key and binds it to the full SHA-256 contract hash (two 128-bit limbs) and a timestamp, without revealing the key.
+3. **Proof → chain.** The Oblivia program verifies the proof on-chain with Solana's `alt_bn128` syscalls and records the signature in the same instruction.
 
-1. **Biometric → key.** The prototype extractor derives a key from local facial geometry. Stability, entropy, liveness and distinct-human uniqueness have not been established. Biometric features are not included in the submission.
-2. **Key → proof.** A Circom Groth16 circuit proves knowledge of the key and binds it to the full SHA-256 contract hash and timestamp — without revealing the key.
-3. **Proof → chain.** Commitments are stored on the Oblivia Anchor program. A Groth16 verifier checks proofs fully on-chain via Solana's alt_bn128 syscalls.
-
-**Program ID (devnet):** `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`
+**Program ID (Devnet):** `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`
 
 ## Data flow and limitations
 
-- Biometric data: never transmitted, never stored
-- Submission: proofs, public commitments and the contract hash are sent to the relay or chain; biometric features and the private signing scalar are not
-- Proofs: cryptographically verifiable by anyone, on Solana
-- Deduplication is per derived key and contract, not a guarantee of one signature per human
-- The proving setup is a development artifact; see the repository README for prototype limitations
+- Signer secret and signer key: never transmitted, never stored by Oblivia.
+- Submitted: proofs, public commitments and the contract hash.
+- The same key commitment appears on every contract a signer signs, so those signatures are linkable to each other. Use separate passkeys for unlinkable contexts.
+- The proving setup is a development artifact pending a production ceremony. Not audited. See the repository's `docs/THREAT_MODEL.md`.
 
 ## License
 
