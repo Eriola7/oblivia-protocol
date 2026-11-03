@@ -5,7 +5,7 @@
 Oblivia has one proof-acceptance boundary: the deployed Solana Groth16 v2 verifier. A signature is recorded only after that verifier accepts a proof whose public inputs match the target contract account.
 
 ```text
-local biometric features → local key derivation → Groth16 proof
+passkey PRF secret (Face ID / Touch ID unlock) → local key derivation → Groth16 proof
                                           │
 contract bytes → SHA-256 → two public 128-bit limbs
                                           │
@@ -33,6 +33,10 @@ The program ID is `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG` on Devnet.
 
 The browser reference applications and Node SDK use `snarkjs` to create Groth16 proofs. The relay serves the corresponding proving artifacts and sponsors transactions subject to configured CORS and basic rate limiting. Production deployments require an authenticated, distributed rate-limit and monitoring design.
 
+## Key management boundary
+
+Key storage, backup and recovery are outside Oblivia. Browser clients obtain the signer secret from a user-verified passkey's WebAuthn PRF output; server integrations pass a secret from their own key store. Nothing is stored by the clients, relay or program.
+
 ## Production boundary
 
-The committed proving key is development-only. A production ceremony, independent review of the circuit/program/biometric pipeline, and Mainnet operations are required before production use.
+The committed proving key is development-only. A production ceremony ([plan](docs/CEREMONY.md)), independent review of the circuit, program and clients ([scope](docs/AUDIT_SCOPE.md)), and Mainnet operations are required before production use.

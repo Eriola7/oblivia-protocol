@@ -2,25 +2,33 @@
 
 > **Devnet status:** the contract-bound Groth16 v2 verifier is deployed to Solana Devnet at `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`.
 
-Oblivia is an open-source, zero-identity contract-signing primitive for Solana. A signer proves knowledge of an on-device-derived signing key and its binding to a specific contract without publishing the key or biometric inputs.
+Oblivia is an open-source, zero-identity contract-signing primitive for Solana: on-chain Groth16 verification plus contract binding. A signer proves knowledge of a private signing key and its binding to the exact bytes of a contract without publishing the key.
+
+Oblivia does not manage keys. In the browser, Face ID / Touch ID only unlocks a standard passkey, and the passkey supplies the signing secret. Backup and recovery come from the platform keychain (iCloud Keychain, Google Password Manager) or the integrator's wallet or key store.
 
 ## Security status
 
-The Devnet program is suitable for integration testing, not production use. The current Groth16 proving key is a development artifact. A production ceremony, independent security review, release hardening, operational monitoring, and a Mainnet deployment remain future work.
+The Devnet program is suitable for integration testing, not production use.
 
-No biometric sample is submitted to the protocol. The biometric client derives a local signing input; the proof system receives only that private scalar and public contract-binding data. Biometric matching and entropy guarantees have not received an independent security audit.
+| Item | Status |
+| --- | --- |
+| Groth16 proving key | Development artifact from a single-party setup. Production ceremony planned: [docs/CEREMONY.md](docs/CEREMONY.md) |
+| Independent audit | Not yet done. Scope: [docs/AUDIT_SCOPE.md](docs/AUDIT_SCOPE.md) |
+| Key management | Delegated to passkeys / wallets. Oblivia stores no keys and runs no recovery service |
+| Human uniqueness | Not provided. Multisig deduplicates **key commitments, not people**: one person with several passkeys counts several times |
+| Mainnet | Not deployed |
 
-The reference browser's 20 quantized feature bytes each have only four possible values (at most 40 bits before hashing, potentially less in practice). Hashing does not increase this entropy. It is a demonstration input, not a production biometric credential. Multisig deduplicates **key commitments**, not people: it provides neither biometric uniqueness/liveness nor an authorized participant list. Repeated scans can produce different keys.
+Read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for what the protocol does and does not protect.
 
 **Devnet proof-receipt upgrade:** deployed on September 26, 2026, at slot `504178380`. The matching relay/SDK must supply both the signer record and the verified contract-bound signature receipt when counting a multisig member. Single-signature verification is unchanged. This correctness fix is not a production security certification.
 
 ## Current architecture
 
 ```text
-Facial geometry (local)
-        │
+Face ID / Touch ID unlocks a synced passkey (local)
+        │  WebAuthn PRF output (32 bytes)
         ▼
-Prototype quantization + hashing → private signing scalar
+Domain-separated SHA-256 → 248-bit private signing scalar
         │
         ▼
 Circom Groth16 circuit
@@ -42,24 +50,21 @@ The same Groth16 relation is proven by the client and verified by the on-chain p
 | On-chain Groth16 v2 verifier | Deployed on Devnet via Solana `alt_bn128` syscalls |
 | Single-signature attestation | Implemented through `verify_groth16_v2` |
 | Anonymous threshold multisig | Implemented as atomic verification plus member recording |
-| Browser reference client | Builds with local, browser-side Groth16 proving |
-| Node SDK | Generates and locally verifies Groth16 proofs before submission |
+| Browser reference client | Passkey unlock (WebAuthn PRF) and local, browser-side Groth16 proving |
+| Node SDK (`@oblivia/sdk`) | Generates and locally verifies Groth16 proofs before submission; installable as a standalone package |
 | Sponsored relay | Implements v2 submission endpoints with origin controls and basic in-memory rate limits |
 
 ## Repository layout
 
 - `zk_groth16/` — Circom circuit, proving artifacts, proof serializer, and contract-binding test.
 - `oblivia-contracts/` — Anchor program and the compile-time Groth16 verification-key generator.
-- `sdk/` — Node and browser proof-generation entrypoints plus Anchor submission helpers.
+- `zk_groth16/ceremony/` — production trusted-setup tooling.
+- `sdk/` — `@oblivia/sdk`: Node and browser entry points, passkey helpers, Anchor submission helpers.
 - `browser-client/` — reference single-signature and multisig clients.
 - `relay/` — sponsored Devnet relay.
-- `biometric-entropy-client/` — local feature extraction and key-derivation utilities.
+- `docs/` — threat model, ceremony plan and audit scope.
 
-`zk_intent_circuit/` is retained as a historical Noir experiment. It is not used by the deployed verifier, relay, reference client, or current SDK flow.
-
-The root `multisig_demo.js` and `witness_node.js` are also historical experiments, not supported v2 examples. The former uses the disabled commitment-only path; the latter is not a verified witness service. Use the current reference clients and SDK examples instead.
-
-`slol/v1/schema.json` is an experimental document format, not an integrated protocol component. Its example agreement types do not implement legal enforcement, asset transfers, or identity guarantees.
+Earlier experiments (the Noir circuit, biometric key derivation, the v1 verifier scripts and the draft document schema) live on the `archive/legacy-experiments` branch. None of them are used by the deployed program, relay, clients or SDK.
 
 ## Local verification
 
@@ -70,11 +75,12 @@ npm run setup:test
 npm test
 ```
 
-`setup:test` runs `npm ci` in the root, `sdk/`, `relay/`, and `zk_groth16/`. `npm test` runs the JavaScript regressions, SDK TypeScript interface checks, and real local Groth16 contract-binding checks. Neither command submits transactions or requires a wallet. Use Node.js 22.14+ for the complete development setup, including the browser build.
+`setup:test` runs `npm ci` in the root, `sdk/`, `relay/`, and `zk_groth16/`. `npm test` runs the JavaScript regressions, SDK TypeScript interface checks, and real local Groth16 contract-binding checks. Neither command submits transactions or requires a wallet. Use Node.js 22.14+ for the complete development setup, including the browser build. CI runs the same checks on every push ([workflow](.github/workflows/ci.yml)).
 
 Additional checks:
 
 ```bash
+npm --prefix sdk test
 npm --prefix sdk run test:proof
 npm --prefix browser-client ci
 npm run build:browser
@@ -96,7 +102,7 @@ The current v2 entrypoints are:
 - `verify_groth16_v2` — validates the Groth16 proof and atomically records the contract-bound anonymous signature.
 - `record_verified_multisig` — records a verified signer for a multisig agreement and finalizes it automatically at the threshold.
 
-Older commitment-only submission instructions are retained only for compatibility and fail closed. New integrations must use the v2 path.
+Older instructions are retained only so the deployed program and IDL stay in sync: the commitment-only `submit_signature` and `submit_multisig_signature` fail closed, and the v1 `verify_groth16` verifies a superseded, non-contract-bound key without recording anything. New integrations must use the v2 path.
 
 The patched multisig counter requires a program-owned `SignerRecord` PDA and a verified `ObliviaSignature` receipt for the exact contract and key commitment. The relay submits verification and counting atomically. The low-level `record_verified_multisig` instruction can also count an existing verified receipt later, but only once; the current relay/SDK signing helpers always submit a fresh verification and therefore cannot reuse a key that has already signed that contract singly. The local VM tests exercise missing/forged/mismatched records and receipts, duplicate counting, threshold finalization, a real development proof, and invalid-proof rollback.
 

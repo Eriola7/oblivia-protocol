@@ -28,6 +28,18 @@ The on-chain verifier accepts only a valid proof for these four values. It then 
 2. Generate and verify each co-signer's v2 proof in the same transaction as `record_verified_multisig`.
 3. The member PDA prevents duplicate key commitments. The agreement finalizes when its threshold is reached.
 
+Deduplication is per key commitment, not per person. One person who controls several signer secrets can be counted several times. Eligibility of participants is the integrating application's responsibility.
+
+## Signer keys
+
+Oblivia does not manage keys. `signer_key` is derived from a caller-supplied secret of at least 32 bytes:
+
+```text
+signer_key = first 31 bytes of SHA-256("oblivia/signer-key/v1" || 0x00 || secret)   (248 bits, < BN254 r)
+```
+
+In browsers the secret is the WebAuthn PRF output of a user-verified passkey, evaluated with salt `SHA-256("oblivia/passkey-prf/v1")`. Synced passkeys give the same secret on every device of the same account.
+
 ## Security and deployment status
 
 The verification key in this repository is development material, not a production ceremony output. The protocol is deployed on Devnet for integration testing. It is not audited or Mainnet-ready.

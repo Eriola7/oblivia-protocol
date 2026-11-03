@@ -19,14 +19,16 @@ The contract account supplies the canonical 32-byte SHA-256 digest. The verifier
 
 ## Privacy model
 
-The signer key and timestamp are private circuit inputs. The key and any biometric features are not serialized into the transaction. A key commitment is public and serves as a per-contract deduplication identifier.
+The signer key and timestamp are private circuit inputs and are never serialized into the transaction. A key commitment is public and serves as a per-contract deduplication identifier. It is the same on every contract a key signs.
 
-Biometric feature processing is local application functionality, not an on-chain identity guarantee. Claims about biometric uniqueness, liveness, or extractor entropy require independent review.
+## Key management
+
+Oblivia does not derive keys from biometrics and does not store or recover keys. The signer key is a domain-separated SHA-256 of a caller-supplied secret (at least 32 bytes), truncated to 248 bits. In browsers that secret is the WebAuthn PRF output of a passkey unlocked with Face ID / Touch ID / the device PIN; the operating system performs user verification and no biometric data reaches Oblivia. Backup and recovery are provided by the passkey's platform keychain or the integrator's key store.
 
 ## Multisig model
 
-Each signer submits a unique verified proof. The program records the verified key commitment in a `MultiSigMember` PDA and increments the agreement only once per member. It marks the agreement finalized at its configured threshold.
+Each signer submits a unique verified proof. The program records the verified key commitment in a `MultiSigMember` PDA and increments the agreement only once per member. It marks the agreement finalized at its configured threshold. Members are distinct keys, not distinct people.
 
 ## Operational limits
 
-Devnet deployment is not a production security statement. Before Mainnet, the project requires a production Groth16 ceremony, independent review, full end-to-end and adversarial testing, robust relay abuse controls, monitoring, and release procedures.
+Devnet deployment is not a production security statement. Before Mainnet, the project requires a production Groth16 ceremony ([plan](docs/CEREMONY.md)), independent review ([scope](docs/AUDIT_SCOPE.md)), full end-to-end and adversarial testing, robust relay abuse controls, monitoring, and release procedures. See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
