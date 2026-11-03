@@ -1,8 +1,7 @@
 {
   "name": "oblivia-protocol",
   "version": "1.0.0",
-  "description": "Zero-identity contract signing protocol for Solana",
-  "main": "integration.js",
+  "description": "Oblivia protocol monorepo: Groth16 circuit, Solana program, SDK, relay and reference clients",
   "scripts": {
     "setup:test": "npm ci && npm --prefix sdk ci && npm --prefix relay ci && npm --prefix zk_groth16 ci",
     "test": "node --test tests/*.test.js && npm --prefix zk_groth16 run test:binding",
@@ -27,10 +26,9 @@
     "typescript": "6.0.3"
   },
   "dependencies": {
-    "@aztec/bb.js": "^4.2.0",
     "@coral-xyz/anchor": "^0.32.1",
-    "@noir-lang/noir_js": "^1.0.0-beta.20",
     "@solana/web3.js": "^1.98.4",
     "dotenv": "^17.4.2"
-  }
+  },
+  "private": true
 }

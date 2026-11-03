@@ -40,7 +40,7 @@ test('actual browser share-link handler preserves exact contract bytes', async (
     }
 });
 
-for (const file of ['anchor_integration.js', 'sdk/lib/anchor_integration.js']) {
+for (const file of ['sdk/lib/anchor_integration.js']) {
     test(file + ' finalization does not send another transaction after automatic finalization', async () => {
         const filename = path.join(root, file);
         const nativeRequire = createRequire(filename);
@@ -158,25 +158,26 @@ test('relay refuses conflicting settings and passes the proof record to counting
     assert.equal(calls[0].accounts.signature.toBase58(), calls[1].accounts.signature.toBase58());
 });
 
-test('browser prevents overlapping scans and allows retry after model failure', async () => {
+test('browser prevents overlapping passkey unlocks and allows retry after an unlock failure', async () => {
     const scanBtn = { disabled: false };
     const status = {};
-    let rejectModel;
-    let loads = 0;
+    let rejectUnlock;
+    let unlocks = 0;
     const context = vm.createContext({
-        require: () => ({}),
+        require: name => name === '../../sdk/lib/passkey'
+            ? { getPasskeySecret: () => { unlocks++; return new Promise((_, reject) => { rejectUnlock = reject; }); } }
+            : {},
         window: { addEventListener() {} },
         document: { getElementById: id => id === 'scanBtn' ? scanBtn : id === 'bioStatus' ? status : null },
-        failModel: () => { loads++; return new Promise((_, reject) => { rejectModel = reject; }); },
     });
     vm.runInContext(fs.readFileSync(path.join(root, 'browser-client/src/multisig.js'), 'utf8'), context);
-    vm.runInContext('loadDetector = failModel', context);
-    const first = context.window.captureBiometric();
-    await context.window.captureBiometric();
-    assert.equal(loads, 1);
+    const first = context.window.unlockAndSign();
+    await context.window.unlockAndSign();
+    await context.window.createPasskeyAndSign();
+    assert.equal(unlocks, 1);
     assert.equal(scanBtn.disabled, true);
-    rejectModel(new Error('model unavailable'));
+    rejectUnlock(new Error('passkey unavailable'));
     await first;
     assert.equal(scanBtn.disabled, false);
-    assert.equal(status.textContent, 'Error. Try again.');
+    assert.equal(status.textContent, 'Passkey unavailable. Try again.');
 });

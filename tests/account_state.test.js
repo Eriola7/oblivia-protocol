@@ -103,7 +103,7 @@ function anchorHelper(file, accountLookup, transact = async name => name + '-tra
     return { methods: context.module.exports, calls };
 }
 
-for (const file of ['anchor_integration.js', 'sdk/lib/anchor_integration.js']) {
+for (const file of ['sdk/lib/anchor_integration.js']) {
     test(file + ' recovers concurrent initialization with exact accounts and no invented transaction', async () => {
         for (const operation of ['register', 'create']) {
             const initialized = operation === 'register' ? await contractAccount() : await multisigAccount();
