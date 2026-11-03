@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  javascript:
+    name: Tests, SDK package and browser build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            sdk/package-lock.json
+            relay/package-lock.json
+            zk_groth16/package-lock.json
+            browser-client/package-lock.json
+      - run: npm run setup:test
+      - name: Repository tests (offline, no wallet)
+        run: npm test
+      - name: SDK package tests
+        run: npm --prefix sdk test
+      - name: SDK installs and proves outside the monorepo
+        run: |
+          npm pack ./sdk --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/consumer" && cd "$RUNNER_TEMP/consumer"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/oblivia-sdk-*.tgz
+          node -e "
+            const o = require('@oblivia/sdk');
+            o.generateProof(o.generateSignerSecret(), 'ci').then(async p => {
+              if (p.publicInputs.length !== 128) throw new Error('bad proof');
+              await globalThis.curve_bn128.terminate();
+              console.log('PASS: packaged SDK proof');
+            }).catch(e => { console.error(e); process.exit(1); });"
+      - name: Browser reference clients build
+        run: |
+          npm --prefix browser-client ci
+          npm run build:browser
+
+  program:
+    name: Anchor program compiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain from rust-toolchain.toml
+        working-directory: oblivia-contracts
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: oblivia-contracts
+      - name: cargo check
+        run: npm run test:program
