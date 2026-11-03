@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const config = require('../sdk/lib/multisig_config');
-const biometric = require('../sdk/lib/biometric_features');
+const signerKeys = require('../sdk/lib/signer_key');
 
 const source = fs.readFileSync(path.join(__dirname, '../browser-client/src/multisig.js'), 'utf8');
 const transaction = '2'.repeat(88);
@@ -45,13 +45,17 @@ function browser(overrides = {}) {
         if (!elements.has(id)) elements.set(id, element());
         return elements.get(id);
     };
-    const calls = { requests: [], proofs: [] };
+    const calls = { requests: [], proofs: [], unlocks: 0, creates: 0 };
     let loaded;
     const context = vm.createContext({
         require(name) {
             if (name === '@noble/hashes/sha2.js') return { sha256: bytes => crypto.createHash('sha256').update(bytes).digest() };
             if (name === '../../sdk/lib/multisig_config') return config;
-            if (name === '../../sdk/lib/biometric_features') return biometric;
+            if (name === '../../sdk/lib/signer_key') return signerKeys;
+            if (name === '../../sdk/lib/passkey') return {
+                getPasskeySecret: async () => { calls.unlocks++; return overrides.getPasskeySecret ? overrides.getPasskeySecret() : new Uint8Array(32).fill(5); },
+                createSignerPasskey: async () => { calls.creates++; return { credentialId: 'AQID' }; },
+            };
             if (name === 'snarkjs') return { groth16: { fullProve: async input => {
                 calls.proofs.push(input);
                 return overrides.prove ? overrides.prove(input) : proof;
@@ -62,9 +66,7 @@ function browser(overrides = {}) {
             location: { origin: 'https://example.test', pathname: '/multisig.html', search: '' },
             addEventListener: (_, handler) => { loaded = handler; },
         },
-        document: { getElementById: get, createElement: tag => tag === 'video' && overrides.video ? overrides.video : element() },
-        navigator: { mediaDevices: { getUserMedia: overrides.getUserMedia } },
-        setTimeout: resolve => resolve(),
+        document: { getElementById: get, createElement: () => element() },
         Buffer, Uint8Array, TextEncoder, URLSearchParams,
         fetch: async (url, options) => {
             calls.requests.push({ url, options });
@@ -78,7 +80,7 @@ function browser(overrides = {}) {
     get('threshold').value = '2';
     get('maxSigners').value = '3';
     get('shareBox').style.display = 'none';
-    vm.runInContext('biometricCaptured = true; biometricFeatures = Array(20).fill(0.5); currentHash = Array(32).fill(1);', context);
+    vm.runInContext('signerUnlocked = true; signerSecret = new Uint8Array(32).fill(5); currentHash = Array(32).fill(1);', context);
     return {
         context, calls, get,
         sign: () => vm.runInContext('doSign()', context),
@@ -309,56 +311,69 @@ test('finalization observed during a pending submission survives rejection and k
     }
 });
 
-test('camera and no-face cleanup preserve finalization while ordinary capture failures remain retryable', async () => {
+test('passkey unlock failures preserve finalization while ordinary failures remain retryable', async () => {
     for (const finalizes of [false, true]) {
-        for (const captureResult of ['camera failure', 'detector failure', 'no face', 'face']) {
+        for (const unlockResult of ['cancelled', 'prf unsupported', 'unlocked']) {
             const statusReply = deferred();
-            const captureReply = deferred();
-            const capturing = deferred();
-            let stopped = 0;
+            const unlockReply = deferred();
+            const unlocking = deferred();
             const b = browser({
                 fetch: () => statusReply.promise,
-                video: { play: async () => {} },
-                getUserMedia: async () => {
-                    if (captureResult === 'camera failure') {
-                        capturing.resolve();
-                        await captureReply.promise;
-                        throw new Error('camera permission denied');
-                    }
-                    return { getTracks: () => [{ stop() { stopped++; } }] };
+                getPasskeySecret: async () => {
+                    unlocking.resolve();
+                    await unlockReply.promise;
+                    if (unlockResult === 'cancelled') throw new Error('The operation was cancelled');
+                    if (unlockResult === 'prf unsupported') throw new Error('WebAuthn PRF unsupported by the provider');
+                    return new Uint8Array(32).fill(5);
                 },
             });
-            b.context.estimateFaces = async () => {
-                capturing.resolve();
-                await captureReply.promise;
-                if (captureResult === 'detector failure') throw new Error('detector failed');
-                return captureResult === 'no face' ? [] : [{}];
-            };
-            vm.runInContext('detector = { estimateFaces }; extractFaceFeatures = () => Array(20).fill(0.5);', b.context);
+            vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
             const status = vm.runInContext('refreshStatus()', b.context);
-            const capture = b.context.window.captureBiometric();
-            await capturing.promise;
+            const unlock = b.context.window.unlockAndSign();
+            await unlocking.promise;
             statusReply.resolve(response(finalizes ? finalized : { collected: 1, threshold: 2, finalized: false }));
             await status;
-            // The non-finalized successful capture is tested elsewhere; this
-            // matrix checks that normal failures remain retryable.
-            if (!finalizes && captureResult === 'face') captureReply.reject(new Error('capture failed'));
-            else captureReply.resolve();
-            await capture;
+            // The non-finalized successful unlock signs and is tested elsewhere;
+            // this matrix checks that normal failures remain retryable.
+            if (!finalizes && unlockResult === 'unlocked') unlockReply.reject(new Error('unlock failed'));
+            else unlockReply.resolve();
+            await unlock;
             if (finalizes) {
                 assertFinalized(b);
                 assert.equal(b.get('bioStatus').textContent, 'Agreement finalized.');
+                assert.equal(b.get('createPasskeyBtn').disabled, true);
             } else {
                 assert.equal(b.get('scanBtn').disabled, false);
                 assert.match(b.get('bioStatus').textContent, /Try again/);
             }
             assert.equal(b.calls.proofs.length, 0);
             assert.equal(b.calls.requests.filter(call => call.options?.method === 'POST').length, 0);
-            assert.equal(vm.runInContext('biometricFeatures', b.context), null);
-            assert.equal(vm.runInContext('biometricCaptured', b.context), false);
-            if (captureResult !== 'camera failure') assert.ok(stopped > 0);
+            assert.equal(vm.runInContext('signerSecret', b.context), null);
+            assert.equal(vm.runInContext('signerUnlocked', b.context), false);
         }
     }
+});
+
+test('unlocking signs immediately and wipes the secret afterwards', async () => {
+    let secret;
+    const b = browser({ getPasskeySecret: () => (secret = new Uint8Array(32).fill(9)) });
+    vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
+    await b.context.window.unlockAndSign();
+    assert.equal(b.calls.proofs.length, 1);
+    assert.equal(b.calls.requests.filter(call => call.options?.method === 'POST').length, 1);
+    assert.deepEqual(Array.from(secret), Array(32).fill(0));
+    assert.equal(vm.runInContext('signerSecret', b.context), null);
+    assert.equal(b.get('scanBtn').disabled, true);
+});
+
+test('creating a passkey registers, unlocks and signs in one step', async () => {
+    const b = browser();
+    vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
+    await b.context.window.createPasskeyAndSign();
+    assert.equal(b.calls.creates, 1);
+    assert.equal(b.calls.unlocks, 1);
+    assert.equal(b.calls.proofs.length, 1);
+    assert.match(b.logs(), /Passkey created/);
 });
 
 test('validated finalization is not downgraded by later non-finalized or failed status lookups', async () => {
@@ -373,18 +388,16 @@ test('validated finalization is not downgraded by later non-finalized or failed 
     }
 });
 
-test('malformed multisig measurements cannot reach proof generation or submission', async () => {
-    for (const expression of ['[]', 'Array(19).fill(0.5)', 'Array(20)', 'Array(20).fill(NaN)', 'Array(20).fill(Infinity)', 'Array(20).fill(null)', 'Array(20).fill("0.5")', 'Array(20).fill(-0.1)', 'Array(20).fill(1.1)']) {
+test('malformed multisig signer secrets cannot reach proof generation or submission', async () => {
+    for (const expression of ['null', '[1, 2, 3]', '"secret"', 'new Uint8Array(31).fill(1)', 'new Uint8Array(32)', 'new Uint16Array(32).fill(1)']) {
         const b = browser();
-        vm.runInContext(`biometricFeatures = ${expression};`, b.context);
+        vm.runInContext(`signerSecret = ${expression};`, b.context);
         await b.sign();
         assert.equal(b.calls.proofs.length, 0);
         assert.equal(b.calls.requests.length, 0);
         assert.equal(b.get('scanBtn').disabled, false);
-        assert.match(b.logs(), /exactly 20 finite numbers/);
+        assert.match(b.logs(), /signerSecret/);
     }
-    const b = browser();
-    assert.throws(() => vm.runInContext('extractFaceFeatures({ keypoints: Array.from({length: 455}, () => ({x: 0, y: 0})) })', b.context), /Face measurements are invalid/);
 });
 
 test('HTML templates let HtmlWebpackPlugin insert each entry bundle exactly once', () => {

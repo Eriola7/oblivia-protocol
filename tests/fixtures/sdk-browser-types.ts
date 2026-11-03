@@ -1,16 +1,19 @@
 // Compiled in the SDK package scope by sdk_package_contract.test.js.
-import { deriveKey, generateProof } from '@oblivia/sdk/browser';
+import { createSignerPasskey, deriveSignerKey, generateProof, getPasskeySecret, PasskeyUnavailableError } from '@oblivia/sdk/browser';
 import type { BrowserProofResult, Groth16Proof, ProvingAssets } from '@oblivia/sdk/browser';
 // @ts-expect-error The browser entry point does not submit transactions.
 import { signContract } from '@oblivia/sdk/browser';
 
 async function checkBrowserApi(features: number[], text: string, bytes: Uint8Array) {
-    const key: string = deriveKey(features);
-    // @ts-expect-error Browser deriveKey returns a string, not the Node object.
-    const nodeKey: { key: string; sketch: string } = deriveKey(features);
+    const { credentialId } = await createSignerPasskey({ rpName: 'Example' });
+    const secret: Uint8Array = await getPasskeySecret({ credentialId });
+    const key: string = deriveSignerKey(secret);
+    // @ts-expect-error Biometric measurement arrays are no longer accepted.
+    deriveSignerKey(features);
+    const error: Error = new PasskeyUnavailableError('unsupported');
     const assets: ProvingAssets = { wasmUrl: '/oblivia.wasm', zkeyUrl: '/oblivia.zkey' };
-    const result: BrowserProofResult = await generateProof(features, text, assets);
-    await generateProof(features, bytes, assets);
+    const result: BrowserProofResult = await generateProof(secret, text, assets);
+    await generateProof(secret, bytes, assets);
     const proof: Groth16Proof = result.proof;
     const x: string = proof.pi_a[0];
     const y: string = proof.pi_b[0][1];
@@ -18,14 +21,14 @@ async function checkBrowserApi(features: number[], text: string, bytes: Uint8Arr
     const inputs: string[] = result.publicInputs;
     const verified: true = result.verified;
     // @ts-expect-error Browser proving requires explicit asset URLs.
-    generateProof(features, text);
+    generateProof(secret, text);
     // @ts-expect-error Both URLs are required.
-    generateProof(features, text, { wasmUrl: '/oblivia.wasm' });
+    generateProof(secret, text, { wasmUrl: '/oblivia.wasm' });
     // @ts-expect-error Browser public inputs are decimal strings, not Anchor bytes.
     const anchorInputs: number[] = result.publicInputs;
     // @ts-expect-error Local proof generation is not an on-chain submission.
     result.transaction;
-    return { key, proof, x, y, hash, inputs, verified };
+    return { key, error, proof, x, y, hash, inputs, verified };
 }
 
 void checkBrowserApi;

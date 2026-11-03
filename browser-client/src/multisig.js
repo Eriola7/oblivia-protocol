@@ -1,9 +1,8 @@
 const { sha256 } = require('@noble/hashes/sha2.js');
 const snarkjs = require('snarkjs');
-const tf = require('@tensorflow/tfjs');
-const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
 const { validateMultisigConfig } = require('../../sdk/lib/multisig_config');
-const { validateBiometricFeatures } = require('../../sdk/lib/biometric_features');
+const { deriveSignerKey } = require('../../sdk/lib/signer_key');
+const { createSignerPasskey, getPasskeySecret } = require('../../sdk/lib/passkey');
 
 const RELAY_URL = 'https://oblivia-relay.onrender.com';
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
@@ -13,9 +12,9 @@ function grothPayload(proof, signals) {
   return { proofA: Array.from([...fieldBytes(proof.pi_a[0]), ...fieldBytes(FIELD_MODULUS - BigInt(proof.pi_a[1]))]), proofB: Array.from([...fieldBytes(proof.pi_b[0][1]), ...fieldBytes(proof.pi_b[0][0]), ...fieldBytes(proof.pi_b[1][1]), ...fieldBytes(proof.pi_b[1][0])]), proofC: Array.from([...fieldBytes(proof.pi_c[0]), ...fieldBytes(proof.pi_c[1])]), publicInputs: signals.flatMap(signal => Array.from(fieldBytes(signal))), keyCommitment: Array.from(fieldBytes(signals[0])), signatureCommitment: Array.from(fieldBytes(signals[1])) };
 }
 
-let biometricCaptured = false;
-let biometricFeatures = null;
-let detector = null;
+// Face ID / Touch ID only unlocks a standard passkey; its PRF output is the signer secret.
+let signerUnlocked = false;
+let signerSecret = null;
 let currentContract = null;
 let currentHash = null;
 let creatingInProgress = false;
@@ -56,6 +55,8 @@ function renderStatus(status) {
   if (status.finalized) {
     document.getElementById('scanBtn').disabled = true;
     document.getElementById('scanBtn').textContent = 'Agreement Finalized';
+    const createBtn = document.getElementById('createPasskeyBtn');
+    if (createBtn) createBtn.disabled = true;
   }
 }
 
@@ -81,31 +82,10 @@ function log(msg, type = 'step') {
   el.scrollTop = el.scrollHeight;
 }
 
-function quantizeFeatures(f) { return validateBiometricFeatures(f).map(x => Math.round(x * 255)); }
-function applyErrorCorrection(q) { const b = 64; return q.map(v => Math.floor(v / b) * b); }
-function deriveKey(features) {
-  const c = applyErrorCorrection(quantizeFeatures(features));
-  const bytes = new Uint8Array(c.map(v => v & 0xFF));
-  const salt = new TextEncoder().encode('oblivia-v1');
-  const combined = new Uint8Array(bytes.length + salt.length);
-  combined.set(bytes); combined.set(salt, bytes.length);
-  const hash = sha256(combined);
-  return Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-function extractFaceFeatures(landmarks) {
-  const p = landmarks.keypoints;
-  const d = (a, b) => Math.sqrt(Math.pow(p[a].x - p[b].x, 2) + Math.pow(p[a].y - p[b].y, 2));
-  const fw = d(234, 454);
-  if (!Number.isFinite(fw) || fw <= 0) {
-    throw new Error('Face measurements are invalid; please face the camera and try again');
-  }
-  return validateBiometricFeatures([d(33, 263) / fw, d(1, 152) / fw, d(61, 291) / fw, d(17, 0) / fw, d(133, 362) / fw, d(70, 300) / fw, d(159, 145) / fw, d(386, 374) / fw, d(94, 19) / fw, d(2, 94) / fw, d(78, 308) / fw, d(13, 14) / fw, d(168, 6) / fw, d(55, 285) / fw, d(8, 168) / fw, d(454, 356) / fw, d(234, 127) / fw, d(152, 378) / fw, d(263, 362) / fw, d(33, 133) / fw]);
-}
-async function loadDetector() {
-  log('Loading face model...');
-  const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-  detector = await faceLandmarksDetection.createDetector(model, { runtime: 'tfjs', refineLandmarks: false, maxFaces: 1 });
-  log('Model loaded');
+function clearSigner() {
+  if (signerSecret) signerSecret.fill(0);
+  signerSecret = null;
+  signerUnlocked = false;
 }
 
 function hashContract(text) {
@@ -203,52 +183,46 @@ window.copyLink = function () {
   log('Link copied \u2014 send it to your co-signers', 'success');
 };
 
-window.captureBiometric = async function () {
+async function unlockSigner(create) {
   const scanBtn = document.getElementById('scanBtn');
   if (scanBtn.disabled || finalizedStatus) return;
   scanBtn.disabled = true;
   const status = document.getElementById('bioStatus');
-  let stream;
   try {
-    if (!detector) await loadDetector();
+    if (create) {
+      status.textContent = 'Creating passkey...';
+      await createSignerPasskey({ rpName: 'Oblivia', userName: 'Oblivia co-signer' });
+      log('Passkey created \u2014 backed up by your platform keychain', 'success');
+      if (finalizedStatus) return;
+    }
+    status.textContent = 'Confirm with Face ID, Touch ID or device PIN...';
+    signerSecret = await getPasskeySecret();
     if (finalizedStatus) return;
-    status.textContent = 'Accessing camera...';
-    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
-    if (finalizedStatus) return;
-    const video = document.createElement('video');
-    video.srcObject = stream; video.width = 640; video.height = 480;
-    await video.play();
-    status.textContent = 'Scanning... hold still';
-    await new Promise(r => setTimeout(r, 3000));
-    const faces = await detector.estimateFaces(video);
-    stream.getTracks().forEach(t => t.stop());
-    if (finalizedStatus) return;
-    if (faces.length === 0) { status.textContent = 'No face detected. Try again.'; scanBtn.disabled = false; return; }
-    biometricFeatures = extractFaceFeatures(faces[0]);
-    biometricCaptured = true;
-    status.textContent = 'Face captured \u2014 signing...';
-    log('Face detected, key derived on-device', 'success');
+    signerUnlocked = true;
+    status.textContent = 'Passkey unlocked \u2014 signing...';
+    log('Passkey unlocked on-device \u2014 signer secret never transmitted', 'success');
     await doSign();
   } catch (e) {
     log('Error: ' + e.message);
     if (!finalizedStatus) {
-      status.textContent = 'Error. Try again.';
+      status.textContent = 'Passkey unavailable. Try again.';
       scanBtn.disabled = false;
     }
   } finally {
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    biometricFeatures = null;
-    biometricCaptured = false;
+    clearSigner();
     if (finalizedStatus) {
       status.textContent = 'Agreement finalized.';
       renderStatus(finalizedStatus);
     }
   }
-};
+}
+
+window.unlockAndSign = function () { return unlockSigner(false); };
+window.createPasskeyAndSign = function () { return unlockSigner(true); };
 
 async function doSign() {
   if (signingInProgress || finalizedStatus) return;
-  if (!biometricCaptured) { log('Capture your face first'); return; }
+  if (!signerUnlocked) { log('Unlock your passkey first'); return; }
   const scanBtn = document.getElementById('scanBtn');
   if (scanBtn) scanBtn.disabled = true;
   signingInProgress = true;
@@ -258,10 +232,10 @@ async function doSign() {
   let submitting = false;
   try {
     log('Deriving key...');
-    signingKey = deriveKey(biometricFeatures);
+    signingKey = deriveSignerKey(signerSecret);
     log('Generating ZK proof... (takes a moment)');
     const hex = currentHash.map(b => b.toString(16).padStart(2, '0')).join('');
-    input = { contract_hash_lo: BigInt('0x' + hex.slice(0, 32)).toString(), contract_hash_hi: BigInt('0x' + hex.slice(32)).toString(), signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(), timestamp: Date.now().toString() };
+    input = { contract_hash_lo: BigInt('0x' + hex.slice(0, 32)).toString(), contract_hash_hi: BigInt('0x' + hex.slice(32)).toString(), signer_key: signingKey, timestamp: Date.now().toString() };
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
     if (finalizedStatus) {
       log('Agreement already finalized — no signature submitted.');

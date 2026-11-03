@@ -57,7 +57,7 @@
 
     <div class="card" id="createMode" style="display:none;">
       <h2>Create an anonymous co-signed agreement</h2>
-      <p class="hint">Create a multi-signature contract. Share the link with your co-signers. Everyone signs with their face \u2014 no one reveals their identity. It finalizes on-chain once the threshold is met.</p>
+      <p class="hint">Create a multi-signature contract. Share the link with your co-signers. Everyone signs with their own passkey (Face ID / Touch ID) \u2014 no one reveals their identity. It finalizes on-chain once the threshold is met.</p>
       <label>Contract / Agreement text</label>
       <textarea id="contractInput" placeholder="Enter the agreement all parties will sign..."></textarea>
       <div class="row">
@@ -84,7 +84,8 @@
       <div class="contract-box" id="contractDisplay"></div>
       <div class="progress" id="progress">Loading...</div>
       <div class="bio-status" id="bioStatus"></div>
-      <button id="scanBtn" onclick="captureBiometric()">Scan Face &amp; Sign</button>
+      <button id="scanBtn" onclick="unlockAndSign()">Unlock Passkey &amp; Sign</button>
+      <button class="secondary" id="createPasskeyBtn" onclick="createPasskeyAndSign()">No passkey yet? Create one &amp; sign</button>
       <div id="txLink" style="display:none; text-align:center; font-size:12px; margin-top:12px; font-family:monospace;"></div>
     </div>
 

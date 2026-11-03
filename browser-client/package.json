@@ -13,10 +13,7 @@
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
-    "@mediapipe/face_mesh": "^0.4.1633559619",
     "@noble/hashes": "^2.2.0",
-    "@tensorflow-models/face-landmarks-detection": "^1.0.6",
-    "@tensorflow/tfjs": "^4.22.0",
     "assert": "^2.1.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",

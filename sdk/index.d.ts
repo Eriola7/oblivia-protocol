@@ -1,6 +1,8 @@
 /**
- * Oblivia SDK — Zero-identity contract signing for Solana.
- * MIT licensed. Free forever.
+ * Oblivia SDK — zero-identity contract signing for Solana.
+ * An on-chain Groth16 verification and contract-binding primitive. Key
+ * management and backup are left to standard wallets and passkeys.
+ * MIT licensed.
  */
 import type { PublicKey } from '@solana/web3.js';
 
@@ -10,7 +12,7 @@ export interface SignResult {
   verified: true;
   /** Always false — identity is never revealed. */
   identityRevealed: false;
-  /** Always false — biometric data never leaves the device. */
+  /** Always false — the signer secret and signer key never leave the device. */
   dataTransmitted: false;
   /** Confirmed transaction signature of the on-chain submission. */
   transaction: string;
@@ -46,35 +48,42 @@ export interface MultiSigState {
   finalized: boolean;
 }
 
+/** Bytes from a passkey PRF, wallet or device seed: at least 32 bytes, not all zero. */
+export type SignerSecret = Uint8Array;
+
 /**
- * Derive a prototype signing key from biometric features.
- * Runs entirely on-device. No data is transmitted or stored.
- * @param biometricFeatures - Array of normalized biometric measurements (e.g. facial geometry ratios).
- * Stability, biometric entropy, and uniqueness are not established guarantees.
- * @returns Hex-encoded signing key and reconstruction sketch.
+ * Generate a fresh 32-byte signer secret for server-side or test signers.
+ * Store it in your own key store; Oblivia keeps no copy.
  */
-export function deriveKey(biometricFeatures: number[]): { key: string; sketch: string };
+export function generateSignerSecret(): Uint8Array;
+
+/**
+ * Derive the private circuit input from a signer secret.
+ * Deterministic: the same secret always yields the same signer.
+ * @returns Decimal BN254 field element (248-bit).
+ */
+export function deriveSignerKey(signerSecret: SignerSecret): string;
 
 /**
  * Generate a zero-knowledge proof of contract signing.
  * Proves knowledge of the signing key and binds it to the contract hash and timestamp
  * without revealing the key or the signer's identity.
- * @param biometricFeatures - Biometric measurements used to derive the signing key.
+ * @param signerSecret - At least 32 bytes from a passkey, wallet or device seed.
  * @param contractData - The contract content (string or bytes) to sign.
  */
 export function generateProof(
-  biometricFeatures: number[],
+  signerSecret: SignerSecret,
   contractData: string | Uint8Array
 ): Promise<ProofResult>;
 
 /**
  * Full signing pipeline: derive key, generate proof, register contract,
- * submit ZK commitments on-chain, and verify.
- * @param biometricFeatures - Biometric measurements used to derive the signing key.
+ * and verify the proof on-chain in the same transaction that records it.
+ * @param signerSecret - At least 32 bytes from a passkey, wallet or device seed.
  * @param contractData - The contract content to sign.
  */
 export function signContract(
-  biometricFeatures: number[],
+  signerSecret: SignerSecret,
   contractData: string | Uint8Array
 ): Promise<SignResult>;
 
@@ -100,11 +109,13 @@ export function createMultiSigContract(
 /**
  * Sign a multi-signature contract as one of N anonymous signers.
  * Duplicate signatures from the same key are rejected on-chain via PDA deduplication.
- * @param biometricFeatures - The signer's biometric measurements.
+ * Deduplication is per key, not per person: one person holding several keys
+ * counts several times. Restrict eligible signers in your application.
+ * @param signerSecret - At least 32 bytes from a passkey, wallet or device seed.
  * @param contractData - The contract being signed.
  */
 export function signMultiSig(
-  biometricFeatures: number[],
+  signerSecret: SignerSecret,
   contractData: string | Uint8Array
 ): Promise<SignResult>;
 

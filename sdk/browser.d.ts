@@ -1,4 +1,4 @@
-/** Browser-only local proving helpers. No wallet or transaction submission API. */
+/** Browser-only passkey and local proving helpers. No wallet or transaction submission API. */
 export interface ProvingAssets {
   wasmUrl: string;
   zkeyUrl: string;
@@ -23,12 +23,38 @@ export interface BrowserProofResult {
   verified: true;
 }
 
-/** Derive a hex key from exactly 20 finite local measurements in [0, 1]. */
-export function deriveKey(biometricFeatures: number[]): string;
+export interface PasskeyOptions {
+  /** Relying party ID; defaults to the current origin's domain. */
+  rpId?: string;
+  /** Inject a CredentialsContainer (defaults to navigator.credentials). */
+  credentials?: CredentialsContainer;
+}
+
+/** Thrown when WebAuthn or its PRF extension is unavailable, or the user cancels. */
+export class PasskeyUnavailableError extends Error {}
+
+/**
+ * Create a discoverable, user-verified passkey (synced by iCloud Keychain or
+ * Google Password Manager where the platform supports it).
+ */
+export function createSignerPasskey(
+  options?: PasskeyOptions & { rpName?: string; userName?: string }
+): Promise<{ credentialId: string }>;
+
+/**
+ * Unlock a passkey with Face ID / Touch ID / device PIN and return its
+ * 32-byte PRF secret. Discard it after deriving the signer key.
+ */
+export function getPasskeySecret(
+  options?: PasskeyOptions & { credentialId?: string }
+): Promise<Uint8Array>;
+
+/** Derive the private circuit input (decimal field element) from a signer secret. */
+export function deriveSignerKey(signerSecret: Uint8Array): string;
 
 /** Generate and locally verify a proof using explicitly supplied circuit assets. */
 export function generateProof(
-  biometricFeatures: number[],
+  signerSecret: Uint8Array,
   contractData: string | Uint8Array,
   provingAssets: ProvingAssets
 ): Promise<BrowserProofResult>;

@@ -1,8 +1,7 @@
 const { sha256 } = require('@noble/hashes/sha2.js');
 const snarkjs = require('snarkjs');
-const tf = require('@tensorflow/tfjs');
-const faceLandmarksDetection = require('@tensorflow-models/face-landmarks-detection');
-const { validateBiometricFeatures } = require('../../sdk/lib/biometric_features');
+const { deriveSignerKey } = require('../../sdk/lib/signer_key');
+const { createSignerPasskey, getPasskeySecret } = require('../../sdk/lib/passkey');
 const RELAY_URL = 'https://oblivia-relay.onrender.com';
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
 
@@ -31,14 +30,21 @@ function anchorProof(proof, signals) {
     };
 }
 
-let biometricCaptured = false;
-let biometricFeatures = null;
-let detector = null;
-let captureInProgress = false;
+// Face ID / Touch ID only unlocks a standard passkey; its PRF output is the
+// signer secret. Oblivia stores nothing; the platform keychain handles backup.
+let signerUnlocked = false;
+let signerSecret = null;
+let unlockInProgress = false;
 let signingInProgress = false;
-// Session-only confirmed receipts: never retain a signing scalar or biometric key.
+// Session-only confirmed receipts: never retain a signing scalar or secret.
 const confirmedReceipts = new Map();
-let confirmedCaptureReceipt = null;
+let confirmedSignerReceipt = null;
+
+function clearSigner() {
+    if (signerSecret) signerSecret.fill(0);
+    signerSecret = null;
+    signerUnlocked = false;
+}
 
 function showConfirmedReceipt(receipt) {
     document.getElementById('signedContractDisplay').textContent = receipt.contract;
@@ -58,11 +64,11 @@ function showConfirmedReceipt(receipt) {
 window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('contract').addEventListener('input', () => {
         if (signingInProgress) return;
-        const alreadySigned = confirmedCaptureReceipt &&
-            confirmedCaptureReceipt.contract === document.getElementById('contract').value;
-        document.getElementById('signBtn').disabled = Boolean(alreadySigned) || !biometricCaptured || captureInProgress;
+        const alreadySigned = confirmedSignerReceipt &&
+            confirmedSignerReceipt.contract === document.getElementById('contract').value;
+        document.getElementById('signBtn').disabled = Boolean(alreadySigned) || !signerUnlocked || unlockInProgress;
         if (alreadySigned) {
-            showConfirmedReceipt(confirmedCaptureReceipt);
+            showConfirmedReceipt(confirmedSignerReceipt);
             return;
         }
         document.getElementById('result').classList.remove('show');
@@ -82,154 +88,59 @@ function log(message, type = 'step') {
     logEl.scrollTop = logEl.scrollHeight;
 }
 
-function quantizeFeatures(features) {
-    return validateBiometricFeatures(features).map(f => Math.round(f * 255));
-}
-
-function applyErrorCorrection(quantized) {
-    const bucketSize = 64;
-    return quantized.map(v => Math.floor(v / bucketSize) * bucketSize);
-}
-
-function deriveKey(features) {
-    const quantized = quantizeFeatures(features);
-    const corrected = applyErrorCorrection(quantized);
-    const bytes = new Uint8Array(corrected.map(v => v & 0xFF));
-    const salt = new TextEncoder().encode('oblivia-v1');
-    const combined = new Uint8Array(bytes.length + salt.length);
-    combined.set(bytes);
-    combined.set(salt, bytes.length);
-    const hash = sha256(combined);
-    return Array.from(hash).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function extractFaceFeatures(landmarks) {
-    // Extract 20 stable geometric ratios from face landmarks
-    const points = landmarks.keypoints;
-    
-    const dist = (a, b) => Math.sqrt(
-        Math.pow(points[a].x - points[b].x, 2) + 
-        Math.pow(points[a].y - points[b].y, 2)
-    );
-    
-    const faceWidth = dist(234, 454);
-    if (!Number.isFinite(faceWidth) || faceWidth <= 0) {
-        throw new Error('Face measurements are invalid; please face the camera and try again');
-    }
-    
-    // Normalize all distances by face width for scale invariance
-    const features = [
-        dist(33, 263) / faceWidth,   // eye distance
-        dist(1, 152) / faceWidth,    // nose to chin
-        dist(61, 291) / faceWidth,   // mouth width
-        dist(17, 0) / faceWidth,     // lip height
-        dist(133, 362) / faceWidth,  // inner eye distance
-        dist(70, 300) / faceWidth,   // brow width
-        dist(159, 145) / faceWidth,  // left eye height
-        dist(386, 374) / faceWidth,  // right eye height
-        dist(94, 19) / faceWidth,    // nose width
-        dist(2, 94) / faceWidth,     // nose length
-        dist(78, 308) / faceWidth,   // outer mouth width
-        dist(13, 14) / faceWidth,    // mouth opening
-        dist(168, 6) / faceWidth,    // nose bridge
-        dist(55, 285) / faceWidth,   // brow arch left
-        dist(8, 168) / faceWidth,    // forehead height
-        dist(454, 356) / faceWidth,  // jaw right
-        dist(234, 127) / faceWidth,  // jaw left
-        dist(152, 378) / faceWidth,  // chin shape
-        dist(263, 362) / faceWidth,  // outer right eye
-        dist(33, 133) / faceWidth,   // outer left eye
-    ];
-    
-    return validateBiometricFeatures(features);
-}
-
-async function loadDetector() {
-    log('Loading face detection model...');
-    const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-    detector = await faceLandmarksDetection.createDetector(model, {
-        runtime: 'tfjs',
-        refineLandmarks: false,
-        maxFaces: 1
-    });
-    log('Model loaded');
-}
-
-window.captureBiometric = async function() {
-    if (captureInProgress || signingInProgress) return;
-    captureInProgress = true;
-    // A new capture may derive a different key. Compare its public commitment
+window.unlockSigner = async function(create = false) {
+    if (unlockInProgress || signingInProgress) return;
+    unlockInProgress = true;
+    // A different passkey derives a different key. Compare its public commitment
     // against earlier receipts after proving, without persisting the secret.
-    confirmedCaptureReceipt = null;
-    const box = document.getElementById('biometricBox');
-    const status = document.getElementById('biometricStatus');
-    const icon = document.getElementById('biometricIcon');
+    confirmedSignerReceipt = null;
+    const box = document.getElementById('passkeyBox');
+    const status = document.getElementById('passkeyStatus');
+    const icon = document.getElementById('passkeyIcon');
     document.getElementById('signBtn').disabled = true;
-    biometricCaptured = false;
-    if (biometricFeatures) biometricFeatures.fill(0);
-    biometricFeatures = null;
+    clearSigner();
     box.classList.remove('active');
-    let stream;
-    let video;
-    
+
     try {
-        if (!detector) await loadDetector();
-        
-        status.textContent = 'Accessing camera...';
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480, facingMode: 'user' } 
-        });
-        
-        video = document.createElement('video');
-        video.srcObject = stream;
-        video.width = 640;
-        video.height = 480;
-        await video.play();
-        
-        status.textContent = 'Scanning face... hold still';
-        icon.textContent = '◎';
-        
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        const faces = await detector.estimateFaces(video);
-        stream.getTracks().forEach(t => t.stop());
-        
-        if (faces.length === 0) {
-            status.textContent = 'No face detected. Try again.';
-            return;
+        if (create) {
+            status.textContent = 'Creating passkey...';
+            await createSignerPasskey({ rpName: 'Oblivia', userName: 'Oblivia signer' });
+            log('Passkey created — backed up by your platform keychain', 'success');
         }
-        
-        biometricFeatures = extractFaceFeatures(faces[0]);
-        biometricCaptured = true;
-        
+        status.textContent = 'Confirm with Face ID, Touch ID or device PIN...';
+        icon.textContent = '◎';
+        signerSecret = await getPasskeySecret();
+        signerUnlocked = true;
+
         box.classList.add('active');
-        status.textContent = 'Biometric captured. Key derived on-device.';
+        status.textContent = 'Passkey unlocked. Signer ready.';
         icon.textContent = '◉';
-        
         document.getElementById('signBtn').disabled = false;
-        log('Face detected — 20 geometric ratios extracted', 'success');
-        log('Signing key derived on-device — never transmitted', 'success');
-        
-    } catch(e) {
+        log('Passkey unlocked on-device — signer secret never transmitted', 'success');
+    } catch (e) {
+        clearSigner();
         log('Error: ' + e.message);
-        status.textContent = 'Error. Try again.';
+        status.textContent = 'Passkey unavailable. Try again or create a passkey.';
+        icon.textContent = '◉';
     } finally {
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        if (video) video.srcObject = null;
-        captureInProgress = false;
+        unlockInProgress = false;
     }
-}
+};
+
+window.createPasskey = function() {
+    return window.unlockSigner(true);
+};
 
 window.signContract = async function() {
-    if (signingInProgress || captureInProgress) return;
+    if (signingInProgress || unlockInProgress) return;
     const contractInput = document.getElementById('contract');
     const contract = contractInput.value;
     if (!contract) { log('Please enter contract text'); return; }
-    if (!biometricCaptured) { log('Please capture biometric first'); return; }
-    if (confirmedCaptureReceipt && confirmedCaptureReceipt.contract === contract) {
-        showConfirmedReceipt(confirmedCaptureReceipt);
+    if (!signerUnlocked) { log('Please unlock your passkey first'); return; }
+    if (confirmedSignerReceipt && confirmedSignerReceipt.contract === contract) {
+        showConfirmedReceipt(confirmedSignerReceipt);
         document.getElementById('signBtn').disabled = true;
-        log('Already signed with this capture — keeping the confirmed receipt.', 'success');
+        log('Already signed with this passkey — keeping the confirmed receipt.', 'success');
         return;
     }
 
@@ -248,8 +159,8 @@ window.signContract = async function() {
     let signingKey;
     let input;
     try {
-        log('Deriving signing key from biometric...');
-        signingKey = deriveKey(biometricFeatures);
+        log('Deriving signing key from passkey secret...');
+        signingKey = deriveSignerKey(signerSecret);
         log('Signing key derived — kept only in memory');
 
         log('Hashing contract...');
@@ -262,7 +173,7 @@ window.signContract = async function() {
         const [contract_hash_lo, contract_hash_hi] = contractHashLimbs(contractHash);
         input = {
             contract_hash_lo, contract_hash_hi,
-            signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
+            signer_key: signingKey,
             timestamp: Date.now().toString()
         };
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, RELAY_URL + '/proving-assets/oblivia_js/oblivia.wasm', RELAY_URL + '/proving-assets/oblivia_1.zkey');
@@ -276,7 +187,7 @@ window.signContract = async function() {
         const receiptKey = Buffer.from(contractHash).toString('hex') + ':' + keyCommitment;
         const existingReceipt = confirmedReceipts.get(receiptKey);
         if (existingReceipt) {
-            confirmedCaptureReceipt = existingReceipt;
+            confirmedSignerReceipt = existingReceipt;
             showConfirmedReceipt(existingReceipt);
             log('This signing key already signed this agreement — keeping the confirmed receipt.', 'success');
             return;
@@ -301,9 +212,9 @@ window.signContract = async function() {
         if (typeof data.transaction !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(data.transaction)) {
             throw new Error('Relay did not return a valid transaction signature');
         }
-        confirmedCaptureReceipt = { contract, transaction: data.transaction, proofPreview };
-        confirmedReceipts.set(receiptKey, confirmedCaptureReceipt);
-        showConfirmedReceipt(confirmedCaptureReceipt);
+        confirmedSignerReceipt = { contract, transaction: data.transaction, proofPreview };
+        confirmedReceipts.set(receiptKey, confirmedSignerReceipt);
+        showConfirmedReceipt(confirmedSignerReceipt);
         log('Signed on-chain — identity concealed', 'success');
         document.getElementById('contractSignedDisplay').textContent = 'TRUE';
         log('Done. Identity: concealed. Proof: on-chain.', 'success');
@@ -326,7 +237,7 @@ window.signContract = async function() {
             log('This result belongs to the submitted agreement below, not the edited text.');
         }
         document.getElementById('result').classList.add('show');
-        document.getElementById('signBtn').disabled = Boolean(confirmedCaptureReceipt &&
-            confirmedCaptureReceipt.contract === contractInput.value);
+        document.getElementById('signBtn').disabled = Boolean(confirmedSignerReceipt &&
+            confirmedSignerReceipt.contract === contractInput.value);
     }
 }

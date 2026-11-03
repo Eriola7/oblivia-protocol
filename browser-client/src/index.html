@@ -58,7 +58,7 @@
             resize: none;
             height: 80px;
         }
-        .biometric-box {
+        .passkey-box {
             background: #0a0a0a;
             border: 1px solid #333;
             padding: 20px;
@@ -66,9 +66,10 @@
             cursor: pointer;
             transition: border-color 0.2s;
         }
-        .biometric-box:hover { border-color: #555; }
-        .biometric-box.active { border-color: #00ff88; }
-        .biometric-status {
+        .secondary-link { background: none; border: none; color: #888; font-size: 12px; margin-top: 8px; padding: 0; cursor: pointer; text-decoration: underline; width: auto; }
+        .passkey-box:hover { border-color: #555; }
+        .passkey-box.active { border-color: #00ff88; }
+        .passkey-status {
             font-size: 0.8rem;
             color: #666;
             margin-top: 8px;
@@ -129,11 +130,12 @@
         </div>
 
         <div class="section">
-            <label>Biometric Verification</label>
-            <div class="biometric-box" id="biometricBox" onclick="captureBiometric()">
-                <div id="biometricIcon">◉</div>
-                <div class="biometric-status" id="biometricStatus">Click to capture biometric</div>
+            <label>Signer</label>
+            <div class="passkey-box" id="passkeyBox" onclick="unlockSigner()">
+                <div id="passkeyIcon">◉</div>
+                <div class="passkey-status" id="passkeyStatus">Click to unlock your passkey (Face ID / Touch ID)</div>
             </div>
+            <button class="secondary-link" type="button" onclick="createPasskey()">No passkey yet? Create one</button>
         </div>
 
         <button id="signBtn" onclick="signContract()" disabled>Sign Contract</button>

@@ -4,14 +4,15 @@
  * Proving is entirely local, using the same Groth16 circuit and verification
  * key accepted by the v2 Solana program. Callers supply URLs for the WASM and
  * proving key so their bundler or asset host controls delivery.
+ *
+ * The signer secret normally comes from getPasskeySecret(): Face ID / Touch ID
+ * unlocks a synced passkey, whose PRF output is the secret. Any other
+ * >= 32-byte secret from a wallet or device key store also works.
  */
 const snarkjs = require('snarkjs');
-const { generate } = require('./lib/fuzzyExtractor');
+const { deriveSignerKey } = require('./lib/signer_key');
+const { createSignerPasskey, getPasskeySecret, PasskeyUnavailableError } = require('./lib/passkey');
 const verificationKey = require('./lib/proving/verification_key.json');
-
-function deriveKey(biometricFeatures) {
-    return generate(biometricFeatures).key;
-}
 
 function toField(bytes) {
     return BigInt('0x' + Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')).toString();
@@ -30,33 +31,41 @@ async function hashContract(contractData) {
 /**
  * Generate and locally verify a contract-bound Groth16 proof.
  *
- * @param {number[]} biometricFeatures normalized local facial measurements
+ * @param {Uint8Array} signerSecret at least 32 bytes, e.g. from getPasskeySecret()
  * @param {string|Uint8Array} contractData canonical contract bytes
  * @param {{wasmUrl: string, zkeyUrl: string}} provingAssets publicly served circuit artifacts
  */
-async function generateProof(biometricFeatures, contractData, provingAssets) {
+async function generateProof(signerSecret, contractData, provingAssets) {
     if (!provingAssets || !provingAssets.wasmUrl || !provingAssets.zkeyUrl) {
         throw new Error('provingAssets.wasmUrl and provingAssets.zkeyUrl are required');
     }
 
-    const signingKey = deriveKey(biometricFeatures);
+    const signerKey = deriveSignerKey(signerSecret);
     const contractHash = await hashContract(contractData);
     const input = {
-        // Match the Node SDK and reference clients' 128-bit signing scalar.
-        signer_key: BigInt('0x' + signingKey.slice(0, 32)).toString(),
+        signer_key: signerKey,
         contract_hash_lo: toField(contractHash.slice(0, 16)),
         contract_hash_hi: toField(contractHash.slice(16, 32)),
         timestamp: Date.now().toString()
     };
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-        input,
-        provingAssets.wasmUrl,
-        provingAssets.zkeyUrl
-    );
-    const verified = await snarkjs.groth16.verify(verificationKey, publicSignals, proof);
-    if (!verified) throw new Error('local Groth16 proof verification failed');
-
-    return { contractHash: Array.from(contractHash), proof, publicInputs: publicSignals, verified };
+    try {
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+            input,
+            provingAssets.wasmUrl,
+            provingAssets.zkeyUrl
+        );
+        const verified = await snarkjs.groth16.verify(verificationKey, publicSignals, proof);
+        if (!verified) throw new Error('local Groth16 proof verification failed');
+        return { contractHash: Array.from(contractHash), proof, publicInputs: publicSignals, verified };
+    } finally {
+        input.signer_key = '0';
+    }
 }
 
-module.exports = { deriveKey, generateProof };
+module.exports = {
+    createSignerPasskey,
+    getPasskeySecret,
+    deriveSignerKey,
+    generateProof,
+    PasskeyUnavailableError
+};

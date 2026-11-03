@@ -8,7 +8,7 @@ const { createRequire } = require('node:module');
 
 const root = path.join(__dirname, '..');
 const sdkRequire = createRequire(path.join(root, 'sdk/index.js'));
-const features = Array(20).fill(0.5);
+const secret = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
 const contract = 'SDK regression: Pay 10% — agreement 📝';
 const transaction = '2'.repeat(88);
 
@@ -45,8 +45,7 @@ for (const method of ['signContract', 'signMultiSig']) {
     test(`public SDK ${method} submits the complete flat proof result`, async () => {
         const proof = fakeProof();
         const calls = [];
-        const extractor = sdkRequire('./lib/fuzzyExtractor');
-        const expectedScalar = BigInt('0x' + extractor.generate(features).key.slice(0, 32));
+        const expectedScalar = sdkRequire('./lib/signer_key').deriveSignerKey(secret);
         const submit = async (hash, submitted) => {
             assert.strictEqual(submitted, proof);
             assert.strictEqual(hash, proof.contractHash);
@@ -71,7 +70,7 @@ for (const method of ['signContract', 'signMultiSig']) {
                 submitVerifiedMultiSig: submit,
             },
         });
-        const result = await sdk[method](features, contract);
+        const result = await sdk[method](secret, contract);
         assert.deepEqual(calls, method === 'signContract' ? ['prove', 'register', 'submit'] : ['prove', 'submit']);
         assert.strictEqual(result.keyCommitment, proof.keyCommitment);
         assert.strictEqual(result.signatureCommitment, proof.signatureCommitment);
@@ -101,42 +100,54 @@ for (const method of ['signContract', 'signMultiSig']) {
                 submitVerifiedMultiSig: submit,
             },
         });
-        await assert.rejects(sdk[method](features, contract), /proving unavailable/);
+        await assert.rejects(sdk[method](secret, contract), /proving unavailable/);
         assert.deepEqual(calls, [], 'a failed proof must not register or submit anything');
         failProving = false;
-        await assert.rejects(sdk[method](features, contract), /submission rejected/);
+        await assert.rejects(sdk[method](secret, contract), /submission rejected/);
         assert.deepEqual(calls, method === 'signContract' ? ['register', 'submit'] : ['submit']);
     });
 }
 
-test('browser fuzzy extractor works without Buffer and preserves key/sketch encoding', () => {
-    const nodeExtractor = sdkRequire('./lib/fuzzyExtractor');
-    const browserExtractor = loadModule('sdk/lib/fuzzyExtractor.js');
-    for (const input of [features, Array.from({ length: 20 }, (_, i) => i / 19)]) {
-        const expected = nodeExtractor.generate(input);
-        const actual = browserExtractor.generate(input);
-        const quantized = input.map(value => Math.round(value * 255));
-        const corrected = quantized.map(value => Math.floor(value / 64) * 64);
-        const previousKey = crypto.createHash('sha256')
-            .update(Buffer.concat([Buffer.from(corrected), Buffer.from('oblivia-v1')]))
-            .digest('hex');
-        const previousSketch = Buffer.from(quantized.map((value, i) => value ^ corrected[i])).toString('hex');
-        assert.equal(actual.key, previousKey);
-        assert.equal(actual.sketch, previousSketch);
-        assert.equal(actual.key, expected.key);
-        assert.equal(actual.sketch, expected.sketch);
-        assert.equal(actual.key.length, 64);
-        assert.equal(actual.sketch.length, 40);
-        assert.equal(browserExtractor.reproduce(input, actual.sketch), expected.key);
+test('signer key derivation is deterministic, domain-separated, Buffer-free and in the BN254 field', () => {
+    const nodeKeys = sdkRequire('./lib/signer_key');
+    const browserKeys = loadModule('sdk/lib/signer_key.js'); // No Buffer global.
+    const field = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
+    for (const input of [secret, new Uint8Array(32).fill(255), Uint8Array.from({ length: 64 }, (_, i) => i)]) {
+        const key = nodeKeys.deriveSignerKey(input);
+        assert.equal(browserKeys.deriveSignerKey(input), key);
+        assert.equal(nodeKeys.deriveSignerKey(Buffer.from(input)), key, 'Buffer and Uint8Array secrets agree');
+        assert.match(key, /^[1-9][0-9]*$/);
+        assert.ok(BigInt(key) < 2n ** 248n && BigInt(key) < field);
+        const digest = crypto.createHash('sha256')
+            .update(Buffer.concat([Buffer.from('oblivia/signer-key/v1'), Buffer.from([0]), Buffer.from(input)]))
+            .digest();
+        assert.equal(key, BigInt('0x' + digest.subarray(0, 31).toString('hex')).toString());
     }
+    assert.notEqual(nodeKeys.deriveSignerKey(secret), nodeKeys.deriveSignerKey(Uint8Array.from(secret, b => b ^ 1)));
 });
 
-test('Node deriveKey returns its documented hex key and sketch object', () => {
+test('weak or malformed signer secrets are rejected before proving or submission', async () => {
+    const calls = [];
+    const sdk = loadModule('sdk/index.js', {
+        './lib/groth16_intent': { generateIntentProof: async () => { calls.push('prove'); } },
+        './lib/anchor_integration': { registerContract: async () => calls.push('register') },
+    });
+    for (const bad of [undefined, null, 'a'.repeat(64), Array(32).fill(1), new Uint8Array(31).fill(1),
+        new Uint8Array(32), new Uint16Array(32).fill(1), new DataView(new ArrayBuffer(32))]) {
+        await assert.rejects(sdk.signContract(bad, contract), /signerSecret/);
+        await assert.rejects(sdk.signMultiSig(bad, contract), /signerSecret/);
+    }
+    assert.deepEqual(calls, []);
+});
+
+test('Node generateSignerSecret returns fresh 32-byte secrets', () => {
     const sdk = loadModule('sdk/index.js', { './lib/anchor_integration': {} });
-    const { key, sketch } = sdk.deriveKey(features);
-    assert.match(key, /^[0-9a-f]{64}$/);
-    assert.match(sketch, /^[0-9a-f]{40}$/);
-    assert.equal(sdkRequire('./lib/fuzzyExtractor').reproduce(features, sketch), key);
+    const a = sdk.generateSignerSecret();
+    const b = sdk.generateSignerSecret();
+    assert.equal(a.length, 32);
+    assert.notDeepEqual(Array.from(a), Array.from(b));
+    assert.match(sdk.deriveSignerKey(a), /^[0-9]+$/);
+    assert.equal(sdk.deriveKey, undefined, 'the biometric deriveKey API was removed');
 });
 
 test('SDK rejects invalid multisig settings and contract data before registration', async () => {
@@ -219,16 +230,16 @@ test('one-shot proof CLI releases cached workers on success and failure', async 
 });
 
 test('real Node/browser SDK proofs agree on contract hash and signer commitment', { timeout: 120000 }, async () => {
-    const extractor = loadModule('sdk/lib/fuzzyExtractor.js');
     const sdk = loadModule('sdk/index.js', {
         './lib/anchor_integration': {}, // No provider, wallet, RPC, or transaction is loaded.
     });
     const browserSdk = loadModule('sdk/browser.js', {
-        './lib/fuzzyExtractor': extractor,
+        './lib/signer_key': loadModule('sdk/lib/signer_key.js'),
+        './lib/passkey': loadModule('sdk/lib/passkey.js'),
     });
     try {
-        const nodeProof = await sdk.generateProof(features, contract);
-        const browserProof = await browserSdk.generateProof(features, contract, {
+        const nodeProof = await sdk.generateProof(secret, contract);
+        const browserProof = await browserSdk.generateProof(secret, contract, {
             wasmUrl: path.join(root, 'sdk/lib/proving/oblivia.wasm'),
             zkeyUrl: path.join(root, 'sdk/lib/proving/oblivia_1.zkey'),
         });
