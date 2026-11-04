@@ -131,14 +131,14 @@
 
         <div class="section">
             <label>Signer</label>
-            <div class="passkey-box" id="passkeyBox" onclick="unlockSigner()">
+            <div class="passkey-box" id="passkeyBox" role="button" tabindex="0">
                 <div id="passkeyIcon">◉</div>
                 <div class="passkey-status" id="passkeyStatus">Click to unlock your passkey (Face ID / Touch ID)</div>
             </div>
-            <button class="secondary-link" type="button" onclick="createPasskey()">No passkey yet? Create one</button>
+            <button class="secondary-link" type="button" id="createPasskeyLink">No passkey yet? Create one</button>
         </div>
 
-        <button id="signBtn" onclick="signContract()" disabled>Sign Contract</button>
+        <button id="signBtn" disabled>Sign Contract</button>
 
         <div class="log" id="log"></div>
 

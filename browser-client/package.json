@@ -4,7 +4,7 @@
   "private": true,
   "description": "Reference single-signature and multisig signing apps (passkey unlock, local Groth16 proving)",
   "scripts": {
-    "start": "webpack serve",
+    "start": "NODE_ENV=development webpack serve",
     "build": "webpack"
   },
   "keywords": [],

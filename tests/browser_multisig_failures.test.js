@@ -451,3 +451,30 @@ test('HTML templates let HtmlWebpackPlugin insert each entry bundle exactly once
         assert.doesNotMatch(template, new RegExp(`<script[^>]*src=["']${script}\\.js`));
     }
 });
+
+test('HTML templates contain no inline event handlers, so the CSP can forbid inline script', () => {
+    for (const html of ['index', 'multisig']) {
+        const template = fs.readFileSync(path.join(__dirname, `../browser-client/src/${html}.html`), 'utf8');
+        assert.doesNotMatch(template, /\son[a-z]+\s*=/i, `${html}.html`);
+        assert.doesNotMatch(template, /<script(?![^>]*\bsrc=)[^>]*>/i, `${html}.html has no inline script blocks`);
+    }
+});
+
+test('the build sets a strict Content Security Policy without eval in production', () => {
+    const config = fs.readFileSync(path.join(__dirname, '../browser-client/webpack.config.js'), 'utf8');
+    assert.match(config, /"default-src 'none'"/);
+    assert.match(config, /"script-src 'self' 'wasm-unsafe-eval'" \+ \(mode === 'development'/);
+    assert.match(config, /meta: cspMeta/);
+    assert.match(config, /process\.env\.NODE_ENV === 'development' \? 'development' : 'production'/);
+});
+
+test('multisig buttons are wired by script, not inline attributes', async () => {
+    const b = browser();
+    b.get('createBtn').dispatch('click');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(b.calls.requests.some(call => call.url.endsWith('/multisig/create')), 'create button creates the agreement');
+    vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
+    b.get('scanBtn').dispatch('click');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(b.calls.unlocks, 1, 'sign button unlocks the passkey');
+});

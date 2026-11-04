@@ -4,7 +4,8 @@ const { deriveSignerKey } = require('../../sdk/lib/signer_key');
 const { createSignerPasskey, getPasskeySecret } = require('../../sdk/lib/passkey');
 const { checkPasskeyDomain } = require('../../sdk/lib/passkey_domain');
 const passkeyConfig = require('./passkey_config');
-const RELAY_URL = 'https://oblivia-relay.onrender.com';
+/* global __OBLIVIA_RELAY_URL__ */
+const RELAY_URL = typeof __OBLIVIA_RELAY_URL__ === 'string' ? __OBLIVIA_RELAY_URL__ : 'https://oblivia-relay.onrender.com';
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
 
 function fieldBytes(value) {
@@ -64,6 +65,15 @@ function showConfirmedReceipt(receipt) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    // Handlers are attached here, not inline, so the page's Content Security
+    // Policy can forbid inline script entirely.
+    const passkeyBox = document.getElementById('passkeyBox');
+    passkeyBox.addEventListener('click', () => window.unlockSigner());
+    passkeyBox.addEventListener('keydown', event => {
+        if (event && (event.key === 'Enter' || event.key === ' ')) window.unlockSigner();
+    });
+    document.getElementById('createPasskeyLink').addEventListener('click', () => window.createPasskey());
+    document.getElementById('signBtn').addEventListener('click', () => window.signContract());
     document.getElementById('contract').addEventListener('input', () => {
         if (signingInProgress) return;
         const alreadySigned = confirmedSignerReceipt &&

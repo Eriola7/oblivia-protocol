@@ -17,6 +17,7 @@ Notable protocol-level changes. SDK releases have their own log in [sdk/CHANGELO
 ### Added
 - Adversarial proof-verification tests: malformed encodings, off-curve and identity points, non-canonical inputs, and well-formed forgeries. They run in CI without a Solana toolchain.
 - The reference clients require a permanent passkey domain (`OBLIVIA_RP_ID`) before creating or unlocking signers. Explicit test builds (`OBLIVIA_PASSKEY_TEST=1`) are labelled as temporary.
+- The reference clients build in production mode with a strict Content Security Policy and no inline event handlers.
 - Production trusted-setup tooling and plan ([docs/CEREMONY.md](docs/CEREMONY.md)), audit scope, and threat model.
 - CI for tests, the packaged SDK, the browser build and the program build.
 - Contributing guide, security policy, code of conduct, support guide, and issue and pull request templates.

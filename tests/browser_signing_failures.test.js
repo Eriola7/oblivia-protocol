@@ -339,3 +339,17 @@ test('explicit test builds work on any host and say the signer is temporary', as
     assert.equal(b.calls.passkeyOptions[0].rpId, undefined);
     assert.match(b.logs(), /Test build: passkeys created here are temporary/);
 });
+
+test('signing-page controls are wired by script, not inline attributes', async () => {
+    const b = browser();
+    vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
+    b.element('createPasskeyLink').dispatch('click');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(b.calls.creates, 1);
+    b.element('signBtn').dispatch('click');
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(b.calls.proofs.length, 1, 'the sign button signs');
+    b.element('passkeyBox').dispatch('click');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(b.calls.unlocks, 2, 'the passkey box unlocks');
+});

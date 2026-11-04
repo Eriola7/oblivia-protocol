@@ -2,6 +2,27 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
 
+// Production by default: no eval-based source maps, so the CSP can forbid eval.
+const mode = process.env.NODE_ENV === 'development' ? 'development' : 'production';
+const relayUrl = process.env.OBLIVIA_RELAY_URL || 'https://oblivia-relay.onrender.com';
+const relayOrigin = new URL(relayUrl).origin;
+
+// The signing page holds the passkey secret while signing, so it may run only
+// its own bundled script. Styles stay inline-only (they cannot run code).
+// Set frame-ancestors and the same policy as an HTTP header on the host too.
+const csp = [
+    "default-src 'none'",
+    "script-src 'self' 'wasm-unsafe-eval'" + (mode === 'development' ? " 'unsafe-eval'" : ''),
+    "worker-src 'self' blob:",
+    "connect-src 'self' " + relayOrigin + (mode === 'development' ? ' ws:' : ''),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "object-src 'none'",
+].join('; ');
+const cspMeta = { 'Content-Security-Policy': { 'http-equiv': 'Content-Security-Policy', content: csp } };
+
 module.exports = {
     entry: {
         main: './src/main.js',
@@ -13,9 +34,10 @@ module.exports = {
         clean: true
     },
     plugins: [
-        new HtmlWebpackPlugin({ template: './src/index.html', filename: 'index.html', chunks: ['main'] }),
-        new HtmlWebpackPlugin({ template: './src/multisig.html', filename: 'multisig.html', chunks: ['multisig'] }),
+        new HtmlWebpackPlugin({ template: './src/index.html', filename: 'index.html', chunks: ['main'], meta: cspMeta }),
+        new HtmlWebpackPlugin({ template: './src/multisig.html', filename: 'multisig.html', chunks: ['multisig'], meta: cspMeta }),
         new webpack.DefinePlugin({
+            __OBLIVIA_RELAY_URL__: JSON.stringify(relayUrl),
             __OBLIVIA_RP_ID__: JSON.stringify(process.env.OBLIVIA_RP_ID || ''),
             __OBLIVIA_PASSKEY_TEST__: JSON.stringify(process.env.OBLIVIA_PASSKEY_TEST === '1'),
         }),
@@ -60,5 +82,8 @@ module.exports = {
         asyncWebAssembly: true,
         topLevelAwait: true
     },
-    mode: 'development'
+    mode,
+    devtool: mode === 'development' ? 'eval-source-map' : false,
+    // The bundles include the Groth16 prover; their size is expected.
+    performance: { hints: false },
 };

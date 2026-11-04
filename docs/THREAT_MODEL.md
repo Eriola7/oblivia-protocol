@@ -25,7 +25,13 @@ Oblivia stores no copy and runs no recovery service. If the key store is lost, t
 
 **Passkey domain.** A passkey belongs to the domain it was created on. If the signing app moves to a different domain, users cannot reach their existing passkeys and get new signer identities; past signatures stay valid. The reference clients refuse to create or unlock passkeys unless the build names a permanent production domain, and only on that domain or its subdomains.
 
-**Compromised signing site.** Anyone who can run script on the signing domain (a cross-site scripting bug, a compromised dependency or a hijacked host) can request the passkey's signing secret during a genuine Face ID / Touch ID prompt and then sign as that user. This risk applies to every browser-based wallet. Mitigations: no third-party scripts, a strict Content Security Policy, pinned and reviewed dependencies, and a minimal, separately hosted signing page.
+**Compromised signing site.** Anyone who can run script on the signing domain (a cross-site scripting bug, a compromised dependency or a hijacked host) can request the passkey's signing secret during a genuine Face ID / Touch ID prompt and then sign as that user. This risk applies to every browser-based wallet. The reference clients reduce it:
+
+- Their production builds load only their own bundled script.
+- A strict Content Security Policy blocks inline, injected and external scripts, string `eval`, and connections to any origin except the relay. This was verified in a browser, where proving and signing still work under the policy.
+- They contain no inline event handlers.
+
+The host must also send the same policy as an HTTP header with `frame-ancestors 'none'` (see [DEPLOYMENT.md](DEPLOYMENT.md)). Pinned, reviewed dependencies remain essential, because the policy cannot stop malicious code inside the app's own bundle.
 
 **Biometrics.** Biometrics never reach Oblivia. The operating system performs user verification and only releases the PRF output. Earlier prototypes derived keys from facial geometry. That approach was removed: the quantized features had at most about 40 bits of entropy and the same face did not reliably reproduce the same key.
 

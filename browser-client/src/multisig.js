@@ -6,7 +6,8 @@ const { createSignerPasskey, getPasskeySecret } = require('../../sdk/lib/passkey
 const { checkPasskeyDomain } = require('../../sdk/lib/passkey_domain');
 const passkeyConfig = require('./passkey_config');
 
-const RELAY_URL = 'https://oblivia-relay.onrender.com';
+/* global __OBLIVIA_RELAY_URL__ */
+const RELAY_URL = typeof __OBLIVIA_RELAY_URL__ === 'string' ? __OBLIVIA_RELAY_URL__ : 'https://oblivia-relay.onrender.com';
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
 
 function fieldBytes(value) { let n = BigInt(value); const out = new Uint8Array(32); for (let i = 31; i >= 0; i--) { out[i] = Number(n & 255n); n >>= 8n; } return out; }
@@ -97,6 +98,12 @@ function hashContract(text) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  // Handlers are attached here, not inline, so the page's Content Security
+  // Policy can forbid inline script entirely.
+  document.getElementById('createBtn').addEventListener('click', () => window.createMultisig());
+  document.getElementById('copyLinkBtn').addEventListener('click', () => window.copyLink());
+  document.getElementById('scanBtn').addEventListener('click', () => window.unlockAndSign());
+  document.getElementById('createPasskeyBtn').addEventListener('click', () => window.createPasskeyAndSign());
   for (const id of ['contractInput', 'threshold', 'maxSigners']) {
     document.getElementById(id).addEventListener('input', () => {
       if (!creatingInProgress) document.getElementById('shareBox').style.display = 'none';
