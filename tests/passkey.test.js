@@ -93,7 +93,8 @@ test('the PRF secret feeds the signer key derivation deterministically', async (
     const { deriveSignerKey } = require('../sdk/lib/signer_key');
     const deviceA = await loadPasskey({ credentials: credentials() }).getPasskeySecret();
     const deviceB = await loadPasskey({ credentials: credentials() }).getPasskeySecret();
-    assert.equal(deriveSignerKey(deviceA), deriveSignerKey(deviceB));
+    const hash = new Uint8Array(32).fill(3);
+    assert.equal(deriveSignerKey(deviceA, hash), deriveSignerKey(deviceB, hash));
 });
 
 test('passkey domain policy: permanent domain, subdomains, localhost and explicit test builds only', () => {

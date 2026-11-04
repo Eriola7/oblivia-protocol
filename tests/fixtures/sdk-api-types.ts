@@ -7,9 +7,11 @@ import type { PublicKey } from '@solana/web3.js';
 
 async function checkApi(features: number[], text: string, bytes: Uint8Array) {
     const secret: Uint8Array = generateSignerSecret();
-    const key: string = deriveSignerKey(secret);
+    const key: string = deriveSignerKey(secret, bytes);
+    // @ts-expect-error Keys are per contract; the contract hash is required.
+    deriveSignerKey(secret);
     // @ts-expect-error Signer secrets are bytes, not biometric measurement arrays.
-    deriveSignerKey(features);
+    deriveSignerKey(features, bytes);
     const proof = await generateProof(secret, bytes);
     const publicInputs: number[] = proof.publicInputs;
     const single = await signContract(secret, text);

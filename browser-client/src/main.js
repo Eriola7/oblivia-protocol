@@ -165,14 +165,14 @@ window.signContract = async function() {
     let signingKey;
     let input;
     try {
-        log('Deriving signing key from passkey secret...');
-        signingKey = deriveSignerKey(signerSecret);
-        log('Signing key derived — kept only in memory');
-
         log('Hashing contract...');
         const contractBytes = new TextEncoder().encode(contract);
         const contractHash = Array.from(sha256(contractBytes)).slice(0, 32);
         log('Contract hash computed');
+
+        log('Deriving this contract\'s signing key from your passkey secret...');
+        signingKey = deriveSignerKey(signerSecret, contractHash);
+        log('Signing key derived — kept only in memory');
 
         stage = 'proof generation';
         log('Generating ZK proof... (this takes a moment)');

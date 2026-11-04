@@ -45,7 +45,7 @@ for (const method of ['signContract', 'signMultiSig']) {
     test(`public SDK ${method} submits the complete flat proof result`, async () => {
         const proof = fakeProof();
         const calls = [];
-        const expectedScalar = sdkRequire('./lib/signer_key').deriveSignerKey(secret);
+        const expectedScalar = sdkRequire('./lib/signer_key').deriveSignerKey(secret, crypto.createHash('sha256').update(contract).digest());
         const submit = async (hash, submitted) => {
             assert.strictEqual(submitted, proof);
             assert.strictEqual(hash, proof.contractHash);
@@ -108,22 +108,36 @@ for (const method of ['signContract', 'signMultiSig']) {
     });
 }
 
-test('signer key derivation is deterministic, domain-separated, Buffer-free and in the BN254 field', () => {
+test('signer key derivation is deterministic per contract, domain-separated, Buffer-free and in the BN254 field', () => {
     const nodeKeys = sdkRequire('./lib/signer_key');
     const browserKeys = loadModule('sdk/lib/signer_key.js'); // No Buffer global.
     const field = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
+    const hash = crypto.createHash('sha256').update(contract).digest();
     for (const input of [secret, new Uint8Array(32).fill(255), Uint8Array.from({ length: 64 }, (_, i) => i)]) {
-        const key = nodeKeys.deriveSignerKey(input);
-        assert.equal(browserKeys.deriveSignerKey(input), key);
-        assert.equal(nodeKeys.deriveSignerKey(Buffer.from(input)), key, 'Buffer and Uint8Array secrets agree');
+        const key = nodeKeys.deriveSignerKey(input, hash);
+        assert.equal(browserKeys.deriveSignerKey(input, hash), key);
+        assert.equal(nodeKeys.deriveSignerKey(Buffer.from(input), Array.from(hash)), key, 'Buffer/array inputs agree');
         assert.match(key, /^[1-9][0-9]*$/);
         assert.ok(BigInt(key) < 2n ** 248n && BigInt(key) < field);
         const digest = crypto.createHash('sha256')
-            .update(Buffer.concat([Buffer.from('oblivia/signer-key/v1'), Buffer.from([0]), Buffer.from(input)]))
+            .update(Buffer.concat([Buffer.from('oblivia/signer-key/v2'), Buffer.from([0]), hash, Buffer.from(input)]))
             .digest();
         assert.equal(key, BigInt('0x' + digest.subarray(0, 31).toString('hex')).toString());
     }
-    assert.notEqual(nodeKeys.deriveSignerKey(secret), nodeKeys.deriveSignerKey(Uint8Array.from(secret, b => b ^ 1)));
+    assert.notEqual(nodeKeys.deriveSignerKey(secret, hash), nodeKeys.deriveSignerKey(Uint8Array.from(secret, b => b ^ 1), hash));
+    for (const bad of [undefined, new Uint8Array(31), Array(32).fill(256), 'a'.repeat(32)]) {
+        assert.throws(() => nodeKeys.deriveSignerKey(secret, bad), /contractHash/);
+    }
+});
+
+test('one signer gets unrelated keys on different contracts but the same key on the same contract', () => {
+    const { deriveSignerKey } = sdkRequire('./lib/signer_key');
+    const contractA = crypto.createHash('sha256').update('Agreement A').digest();
+    const contractB = crypto.createHash('sha256').update('Agreement B').digest();
+    assert.equal(deriveSignerKey(secret, contractA), deriveSignerKey(Uint8Array.from(secret), contractA),
+        'same contract: same key, so on-chain duplicate blocking still applies');
+    assert.notEqual(deriveSignerKey(secret, contractA), deriveSignerKey(secret, contractB),
+        'different contracts: commitments cannot be linked to one signer');
 });
 
 test('weak or malformed signer secrets are rejected before proving or submission', async () => {
@@ -146,7 +160,7 @@ test('Node generateSignerSecret returns fresh 32-byte secrets', () => {
     const b = sdk.generateSignerSecret();
     assert.equal(a.length, 32);
     assert.notDeepEqual(Array.from(a), Array.from(b));
-    assert.match(sdk.deriveSignerKey(a), /^[0-9]+$/);
+    assert.match(sdk.deriveSignerKey(a, new Uint8Array(32).fill(1)), /^[0-9]+$/);
     assert.equal(sdk.deriveKey, undefined, 'the biometric deriveKey API was removed');
 });
 

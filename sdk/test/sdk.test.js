@@ -25,12 +25,15 @@ test('package exposes the documented Node and browser APIs', () => {
     assert.equal(oblivia.deriveKey, undefined);
 });
 
-test('signer keys are deterministic per secret and identical across entry points', () => {
-    const key = oblivia.deriveSignerKey(secret);
-    assert.equal(oblivia.deriveSignerKey(Uint8Array.from(secret)), key);
-    assert.equal(browser.deriveSignerKey(secret), key);
-    assert.notEqual(oblivia.deriveSignerKey(oblivia.generateSignerSecret()), key);
-    assert.throws(() => oblivia.deriveSignerKey(new Uint8Array(16).fill(1)), /signerSecret/);
+test('signer keys are deterministic per contract and identical across entry points', () => {
+    const hash = require('node:crypto').createHash('sha256').update(contract).digest();
+    const other = require('node:crypto').createHash('sha256').update(contract + '!').digest();
+    const key = oblivia.deriveSignerKey(secret, hash);
+    assert.equal(oblivia.deriveSignerKey(Uint8Array.from(secret), hash), key);
+    assert.equal(browser.deriveSignerKey(secret, hash), key);
+    assert.notEqual(oblivia.deriveSignerKey(secret, other), key, 'unlinkable across contracts');
+    assert.notEqual(oblivia.deriveSignerKey(oblivia.generateSignerSecret(), hash), key);
+    assert.throws(() => oblivia.deriveSignerKey(new Uint8Array(16).fill(1), hash), /signerSecret/);
 });
 
 test('Node proof is locally verified and binds the full contract hash', { timeout: 120000 }, async () => {

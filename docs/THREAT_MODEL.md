@@ -8,6 +8,7 @@ Oblivia is an on-chain ZK verification and contract-binding primitive. It proves
 | --- | --- |
 | A signature binds to one exact contract | The proof's public inputs include both 128-bit limbs of SHA-256(contract). The program compares them with the registered contract before verifying. A proof for one contract cannot be replayed on another. |
 | Only valid proofs are recorded | `verify_groth16_v2` verifies the Groth16 proof on-chain and creates the signature PDA in the same instruction. Nothing is written if verification fails. |
+| Signatures cannot be linked across contracts | Signer keys are derived from the contract hash and the signer secret, so one signer's key commitments on different contracts are unrelated. |
 | One key, one signature per contract | Signer-record and multisig-member PDAs are derived from the key commitment, so the same key cannot sign or be counted twice. |
 | The signer key stays private | Only Poseidon commitments are public. The signer key and signer secret never leave the device. |
 | Past signatures survive key loss | Receipts are immutable on-chain PDAs. Losing a key does not invalidate anything already signed. |
@@ -35,7 +36,7 @@ Oblivia stores no copy and runs no recovery service. If the key store is lost, t
 
 **Legal identity and enforceability.** A valid proof shows that a key holder approved the bytes. It does not establish who that person is.
 
-**Linkability across contracts.** A signer key produces the same key commitment on every contract it signs, so those signatures are linkable to each other (not to a person). Users who need unlinkable signatures should use a separate passkey per context.
+**Proving one signer signed two contracts.** Signer keys are derived per contract, so a signer's key commitments on different contracts are unrelated. This makes signatures unlinkable, but it also means the protocol cannot show that the same signer signed contracts A and B. Applications that need that link must build it themselves.
 
 ## Current limitations
 

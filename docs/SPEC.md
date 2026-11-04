@@ -32,11 +32,13 @@ Deduplication is per key commitment, not per person. One person who controls sev
 
 ## Signer keys
 
-Oblivia does not manage keys. `signer_key` is derived from a caller-supplied secret of at least 32 bytes:
+Oblivia does not manage keys. `signer_key` is derived from the contract hash and a caller-supplied secret of at least 32 bytes:
 
 ```text
-signer_key = first 31 bytes of SHA-256("oblivia/signer-key/v1" || 0x00 || secret)   (248 bits, < BN254 r)
+signer_key = first 31 bytes of SHA-256("oblivia/signer-key/v2" || 0x00 || contract_hash || secret)   (248 bits, < BN254 r)
 ```
+
+The key is per contract. The same secret on the same contract always gives the same key, so the signer-record and member PDAs still reject duplicates. Different contracts give unrelated key commitments, so a signer's signatures on different contracts cannot be linked.
 
 In browsers the secret is the WebAuthn PRF output of a user-verified passkey, evaluated with salt `SHA-256("oblivia/passkey-prf/v1")`. Synced passkeys give the same secret on every device of the same account.
 

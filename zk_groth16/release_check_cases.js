@@ -20,7 +20,7 @@ function limbs(hash) {
 // A fresh random signer secret per run, through the same derivation the SDK
 // and browser clients use. There is no biometric path any more.
 async function proveFor(signerSecret, hash, timestamp = Date.now().toString()) {
-  const input = { signer_key: deriveSignerKey(signerSecret), timestamp, ...limbs(hash) };
+  const input = { signer_key: deriveSignerKey(signerSecret, hash), timestamp, ...limbs(hash) };
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, WASM, ZKEY);
   const locallyValid = await snarkjs.groth16.verify(VK, publicSignals, proof);
   if (!locallyValid) throw new Error('genuine proof failed local verification');

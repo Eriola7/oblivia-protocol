@@ -9,6 +9,7 @@ Notable protocol-level changes. SDK releases have their own log in [sdk/CHANGELO
 
 ### Changed
 - **Breaking:** signer keys now come from a passkey (WebAuthn PRF) or a caller-supplied secret, not from biometric measurements. Face ID / Touch ID only unlocks the passkey, and backup and recovery come from the platform keychain. Existing signatures remain valid; signers get new key commitments.
+- Signer keys are derived per contract, so one signer's signatures on different contracts cannot be linked.
 - `@oblivia/sdk` is installable as a standalone package.
 - The Devnet smoke test now simulates well-formed forged and replayed proofs, uses random signers, and reports only observed results.
 

@@ -57,7 +57,7 @@ function generateSignerSecret() {
  */
 async function generateProof(signerSecret, contractData) {
     validateContractData(contractData);
-    return generateIntentProof(deriveSignerKey(signerSecret), contractData);
+    return generateIntentProof(deriveSignerKey(signerSecret, hashContract(contractData)), contractData);
 }
 
 /**

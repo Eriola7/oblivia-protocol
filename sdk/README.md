@@ -77,7 +77,7 @@ await oblivia.signMultiSig(signer2Secret, contractData);
 | Function | Description |
 |---|---|
 | `generateSignerSecret()` | Fresh 32-byte secret for server or test signers. Store it yourself. |
-| `deriveSignerKey(signerSecret)` | Deterministic private circuit input (decimal 248-bit field element). |
+| `deriveSignerKey(signerSecret, contractHash)` | Per-contract private circuit input (decimal 248-bit field element). Same secret and contract give the same key; different contracts give unrelated keys. |
 | `generateProof(signerSecret, contractData)` | Generate and locally verify a proof binding the key to the full contract hash and a timestamp. |
 | `signContract(signerSecret, contractData)` | Full pipeline: key → proof → register → verify and record on-chain. |
 | `createMultiSigContract(contractData, threshold, maxSigners)` | Returns the contract hash, settings, multisig address and transaction; transaction is `null` if the matching configuration already exists. |
@@ -91,7 +91,7 @@ Browser entry point (`@oblivia/sdk/browser`): `createSignerPasskey`, `getPasskey
 
 ## How it works
 
-1. **Secret → key.** `SHA-256("oblivia/signer-key/v1" ‖ 0x00 ‖ secret)`, truncated to 248 bits so it always fits the BN254 field.
+1. **Secret + contract → key.** `SHA-256("oblivia/signer-key/v2" ‖ 0x00 ‖ contractHash ‖ secret)`, truncated to 248 bits so it always fits the BN254 field. Keys are per contract, so signatures cannot be linked across contracts.
 2. **Key → proof.** A Circom Groth16 circuit proves knowledge of the key and binds it to the full SHA-256 contract hash (two 128-bit limbs) and a timestamp, without revealing the key.
 3. **Proof → chain.** The Oblivia program verifies the proof on-chain with Solana's `alt_bn128` syscalls and records the signature in the same instruction.
 
@@ -101,7 +101,7 @@ Browser entry point (`@oblivia/sdk/browser`): `createSignerPasskey`, `getPasskey
 
 - Signer secret and signer key: never transmitted, never stored by Oblivia.
 - Submitted: proofs, public commitments and the contract hash.
-- The same key commitment appears on every contract a signer signs, so those signatures are linkable to each other. Use separate passkeys for unlinkable contexts.
+- Key commitments are per contract, so a signer's signatures on different contracts cannot be linked to each other, and the protocol cannot prove that one signer signed both.
 - The proving setup is a development artifact pending a production ceremony. Not audited. See the repository's `docs/THREAT_MODEL.md`.
 
 ## License

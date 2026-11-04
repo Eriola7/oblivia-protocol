@@ -49,8 +49,8 @@ export function getPasskeySecret(
   options?: PasskeyOptions & { credentialId?: string }
 ): Promise<Uint8Array>;
 
-/** Derive the private circuit input (decimal field element) from a signer secret. */
-export function deriveSignerKey(signerSecret: Uint8Array): string;
+/** Derive the per-contract private circuit input (decimal field element). */
+export function deriveSignerKey(signerSecret: Uint8Array, contractHash: Uint8Array | number[]): string;
 
 /** Generate and locally verify a proof using explicitly supplied circuit assets. */
 export function generateProof(

@@ -7,9 +7,11 @@ import { signContract } from '@oblivia/sdk/browser';
 async function checkBrowserApi(features: number[], text: string, bytes: Uint8Array) {
     const { credentialId } = await createSignerPasskey({ rpName: 'Example' });
     const secret: Uint8Array = await getPasskeySecret({ credentialId });
-    const key: string = deriveSignerKey(secret);
+    const key: string = deriveSignerKey(secret, bytes);
+    // @ts-expect-error Keys are per contract; the contract hash is required.
+    deriveSignerKey(secret);
     // @ts-expect-error Biometric measurement arrays are no longer accepted.
-    deriveSignerKey(features);
+    deriveSignerKey(features, bytes);
     const error: Error = new PasskeyUnavailableError('unsupported');
     const assets: ProvingAssets = { wasmUrl: '/oblivia.wasm', zkeyUrl: '/oblivia.zkey' };
     const result: BrowserProofResult = await generateProof(secret, text, assets);

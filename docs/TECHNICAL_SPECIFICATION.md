@@ -19,11 +19,11 @@ The contract account supplies the canonical 32-byte SHA-256 digest. The verifier
 
 ## Privacy model
 
-The signer key and timestamp are private circuit inputs and are never serialized into the transaction. A key commitment is public and serves as a per-contract deduplication identifier. It is the same on every contract a key signs.
+The signer key and timestamp are private circuit inputs and are never serialized into the transaction. A key commitment is public and serves as a per-contract deduplication identifier. Signer keys are derived per contract, so one signer's commitments on different contracts are unrelated and cannot be linked.
 
 ## Key management
 
-Oblivia does not derive keys from biometrics and does not store or recover keys. The signer key is a domain-separated SHA-256 of a caller-supplied secret (at least 32 bytes), truncated to 248 bits. In browsers that secret is the WebAuthn PRF output of a passkey unlocked with Face ID / Touch ID / the device PIN; the operating system performs user verification and no biometric data reaches Oblivia. Backup and recovery are provided by the passkey's platform keychain or the integrator's key store.
+Oblivia does not derive keys from biometrics and does not store or recover keys. The signer key is a domain-separated SHA-256 of the contract hash and a caller-supplied secret (at least 32 bytes), truncated to 248 bits. In browsers that secret is the WebAuthn PRF output of a passkey unlocked with Face ID / Touch ID / the device PIN; the operating system performs user verification and no biometric data reaches Oblivia. Backup and recovery are provided by the passkey's platform keychain or the integrator's key store.
 
 ## Multisig model
 

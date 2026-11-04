@@ -58,11 +58,13 @@ export type SignerSecret = Uint8Array;
 export function generateSignerSecret(): Uint8Array;
 
 /**
- * Derive the private circuit input from a signer secret.
- * Deterministic: the same secret always yields the same signer.
+ * Derive the private circuit input for one contract.
+ * Deterministic per contract: the same secret and contract always give the same
+ * key, while different contracts give unrelated keys (signatures are unlinkable).
+ * @param contractHash - SHA-256 of the contract bytes, 32 bytes.
  * @returns Decimal BN254 field element (248-bit).
  */
-export function deriveSignerKey(signerSecret: SignerSecret): string;
+export function deriveSignerKey(signerSecret: SignerSecret, contractHash: Uint8Array | number[]): string;
 
 /**
  * Generate a zero-knowledge proof of contract signing.

@@ -10,7 +10,7 @@
  * >= 32-byte secret from a wallet or device key store also works.
  */
 const snarkjs = require('snarkjs');
-const { deriveSignerKey } = require('./lib/signer_key');
+const { deriveSignerKey, validateSignerSecret } = require('./lib/signer_key');
 const { createSignerPasskey, getPasskeySecret, PasskeyUnavailableError } = require('./lib/passkey');
 const verificationKey = require('./lib/proving/verification_key.json');
 
@@ -40,8 +40,9 @@ async function generateProof(signerSecret, contractData, provingAssets) {
         throw new Error('provingAssets.wasmUrl and provingAssets.zkeyUrl are required');
     }
 
-    const signerKey = deriveSignerKey(signerSecret);
+    validateSignerSecret(signerSecret);
     const contractHash = await hashContract(contractData);
+    const signerKey = deriveSignerKey(signerSecret, contractHash);
     const input = {
         signer_key: signerKey,
         contract_hash_lo: toField(contractHash.slice(0, 16)),

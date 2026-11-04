@@ -6,18 +6,31 @@
  * extension, see ./passkey.js) in the browser, or a device seed / wallet
  * secret in Node. Backup and recovery are whatever that key store provides.
  *
- * The secret is mapped to a BN254 scalar with a domain-separated SHA-256 and
- * truncated to 248 bits, which is always below the field modulus, so there is
- * no modular bias and no reduction step.
+ * The secret and the contract hash are mapped to a BN254 scalar with a
+ * domain-separated SHA-256, truncated to 248 bits. That is always below the
+ * field modulus, so there is no modular bias and no reduction step.
+ *
+ * The key is per contract. Within one contract the same secret always gives
+ * the same key, so duplicate signatures are still rejected on-chain. Across
+ * contracts the key commitments are unrelated, so signatures by the same
+ * signer on different contracts cannot be linked to each other.
  *
  * Works in Node and browsers (no Buffer or Node crypto dependency).
  */
 const { sha256 } = require('@noble/hashes/sha2.js');
 
-const SIGNER_KEY_DOMAIN = 'oblivia/signer-key/v1';
+const SIGNER_KEY_DOMAIN = 'oblivia/signer-key/v2';
 const MIN_SECRET_BYTES = 32;
 const SCALAR_BYTES = 31;
 const SECRET_ERROR = 'signerSecret must be a Uint8Array of at least 32 bytes from a passkey, wallet or device seed';
+const HASH_ERROR = 'contractHash must be the 32-byte SHA-256 of the contract';
+
+function toContractHash(hash) {
+    const isBytes = (ArrayBuffer.isView(hash) && !(hash instanceof DataView) && hash.BYTES_PER_ELEMENT === 1) ||
+        (Array.isArray(hash) && hash.every(b => Number.isInteger(b) && b >= 0 && b <= 255));
+    if (!isBytes || hash.length !== 32) throw new TypeError(HASH_ERROR);
+    return Uint8Array.from(hash);
+}
 
 function toSecretBytes(secret) {
     const isByteView = ArrayBuffer.isView(secret) &&
@@ -39,20 +52,24 @@ function validateSignerSecret(secret) {
 }
 
 /**
- * Derive the private circuit input `signer_key` from a signer secret.
- * The same secret always yields the same key, so a synced passkey restores
- * the same signer on a new device.
+ * Derive the private circuit input `signer_key` for one contract.
+ * Deterministic: the same secret and contract always give the same key, so a
+ * synced passkey restores the same signer for that contract on a new device.
  *
  * @param {Uint8Array} secret at least 32 bytes
+ * @param {Uint8Array|number[]} contractHash SHA-256 of the contract, 32 bytes
  * @returns {string} decimal field element, ready for the Groth16 witness
  */
-function deriveSignerKey(secret) {
+function deriveSignerKey(secret, contractHash) {
     const bytes = toSecretBytes(secret);
+    const hash = toContractHash(contractHash);
     const domain = new TextEncoder().encode(SIGNER_KEY_DOMAIN);
-    const input = new Uint8Array(domain.length + 1 + bytes.length);
+    // domain || 0x00 || contractHash (fixed 32 bytes) || secret
+    const input = new Uint8Array(domain.length + 1 + 32 + bytes.length);
     input.set(domain);
     input[domain.length] = 0;
-    input.set(bytes, domain.length + 1);
+    input.set(hash, domain.length + 1);
+    input.set(bytes, domain.length + 1 + 32);
     const digest = sha256(input);
     input.fill(0);
 

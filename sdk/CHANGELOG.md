@@ -10,7 +10,7 @@ First npm release. Targets the Devnet v2 program `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd
 
 ### Added
 
-- `generateSignerSecret()` and `deriveSignerKey(signerSecret)` (Node).
+- `generateSignerSecret()` and `deriveSignerKey(signerSecret, contractHash)` (Node).
 - `createSignerPasskey()`, `getPasskeySecret()` and `deriveSignerKey()` in `@oblivia/sdk/browser`:
   Face ID / Touch ID unlocks a standard synced passkey whose WebAuthn PRF output is the signer secret.
 - Offline package tests (`npm test`) covering key derivation, local Groth16 proving and full contract-hash binding.
@@ -19,7 +19,7 @@ First npm release. Targets the Devnet v2 program `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd
 
 - **Breaking:** `generateProof`, `signContract` and `signMultiSig` take a `signerSecret: Uint8Array`
   (at least 32 bytes from a passkey, wallet or device seed) instead of biometric measurements.
-- The signer key is a 248-bit domain-separated SHA-256 derivation (`oblivia/signer-key/v1`).
+- The signer key is a 248-bit domain-separated SHA-256 of the contract hash and signer secret (`oblivia/signer-key/v2`). Keys are per contract, so signatures cannot be linked across contracts.
 - The SDK no longer loads `.env` files into the host process. Set `OBLIVIA_DEVNET_KEY` yourself;
   a missing or malformed key now fails with a clear error.
 

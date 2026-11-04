@@ -238,7 +238,7 @@ async function doSign() {
   let submitting = false;
   try {
     log('Deriving key...');
-    signingKey = deriveSignerKey(signerSecret);
+    signingKey = deriveSignerKey(signerSecret, currentHash);
     log('Generating ZK proof... (takes a moment)');
     const hex = currentHash.map(b => b.toString(16).padStart(2, '0')).join('');
     input = { contract_hash_lo: BigInt('0x' + hex.slice(0, 32)).toString(), contract_hash_hi: BigInt('0x' + hex.slice(32)).toString(), signer_key: signingKey, timestamp: Date.now().toString() };
