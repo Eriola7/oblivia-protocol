@@ -2,6 +2,8 @@ const { sha256 } = require('@noble/hashes/sha2.js');
 const snarkjs = require('snarkjs');
 const { deriveSignerKey } = require('../../sdk/lib/signer_key');
 const { createSignerPasskey, getPasskeySecret } = require('../../sdk/lib/passkey');
+const { checkPasskeyDomain } = require('../../sdk/lib/passkey_domain');
+const passkeyConfig = require('./passkey_config');
 const RELAY_URL = 'https://oblivia-relay.onrender.com';
 const FIELD_MODULUS = BigInt('21888242871839275222246405745257275088696311157297823662689037894645226208583');
 
@@ -102,14 +104,18 @@ window.unlockSigner = async function(create = false) {
     box.classList.remove('active');
 
     try {
+        // Refuse before touching WebAuthn if this host is not the permanent passkey domain.
+        const domain = checkPasskeyDomain(passkeyConfig, window.location.hostname);
+        if (domain.temporary) log('Test build: passkeys created here are temporary and tied to this address');
+        const rp = domain.rpId ? { rpId: domain.rpId } : {};
         if (create) {
             status.textContent = 'Creating passkey...';
-            await createSignerPasskey({ rpName: 'Oblivia', userName: 'Oblivia signer' });
+            await createSignerPasskey({ ...rp, rpName: 'Oblivia', userName: 'Oblivia signer' });
             log('Passkey created — backed up by your platform keychain', 'success');
         }
         status.textContent = 'Confirm with Face ID, Touch ID or device PIN...';
         icon.textContent = '◎';
-        signerSecret = await getPasskeySecret();
+        signerSecret = await getPasskeySecret(rp);
         signerUnlocked = true;
 
         box.classList.add('active');

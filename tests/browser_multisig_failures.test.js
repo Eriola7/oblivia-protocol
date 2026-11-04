@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const config = require('../sdk/lib/multisig_config');
 const signerKeys = require('../sdk/lib/signer_key');
+const passkeyDomain = require('../sdk/lib/passkey_domain');
 
 const source = fs.readFileSync(path.join(__dirname, '../browser-client/src/multisig.js'), 'utf8');
 const transaction = '2'.repeat(88);
@@ -45,7 +46,7 @@ function browser(overrides = {}) {
         if (!elements.has(id)) elements.set(id, element());
         return elements.get(id);
     };
-    const calls = { requests: [], proofs: [], unlocks: 0, creates: 0 };
+    const calls = { requests: [], proofs: [], unlocks: 0, creates: 0, rpIds: [] };
     let loaded;
     const context = vm.createContext({
         require(name) {
@@ -54,8 +55,10 @@ function browser(overrides = {}) {
             if (name === '../../sdk/lib/signer_key') return signerKeys;
             if (name === '../../sdk/lib/passkey') return {
                 getPasskeySecret: async () => { calls.unlocks++; return overrides.getPasskeySecret ? overrides.getPasskeySecret() : new Uint8Array(32).fill(5); },
-                createSignerPasskey: async () => { calls.creates++; return { credentialId: 'AQID' }; },
+                createSignerPasskey: async options => { calls.creates++; calls.rpIds.push(options.rpId); return { credentialId: 'AQID' }; },
             };
+            if (name === '../../sdk/lib/passkey_domain') return passkeyDomain;
+            if (name === './passkey_config') return overrides.passkeyConfig || { rpId: 'example.test', testMode: false };
             if (name === 'snarkjs') return { groth16: { fullProve: async input => {
                 calls.proofs.push(input);
                 return overrides.prove ? overrides.prove(input) : proof;
@@ -63,7 +66,7 @@ function browser(overrides = {}) {
             return {};
         },
         window: {
-            location: { origin: 'https://example.test', pathname: '/multisig.html', search: '' },
+            location: { origin: 'https://example.test', hostname: overrides.hostname || 'example.test', pathname: '/multisig.html', search: '' },
             addEventListener: (_, handler) => { loaded = handler; },
         },
         document: { getElementById: get, createElement: () => element() },
@@ -371,9 +374,21 @@ test('creating a passkey registers, unlocks and signs in one step', async () => 
     vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
     await b.context.window.createPasskeyAndSign();
     assert.equal(b.calls.creates, 1);
+    assert.deepEqual(b.calls.rpIds, ['example.test']);
     assert.equal(b.calls.unlocks, 1);
     assert.equal(b.calls.proofs.length, 1);
     assert.match(b.logs(), /Passkey created/);
+});
+
+test('co-signing outside the configured passkey domain never reaches WebAuthn', async () => {
+    const b = browser({ hostname: 'phishing.example' });
+    vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
+    await b.context.window.unlockAndSign();
+    await b.context.window.createPasskeyAndSign();
+    assert.equal(b.calls.unlocks + b.calls.creates, 0);
+    assert.equal(b.calls.proofs.length, 0);
+    assert.match(b.logs(), /not the passkey domain example\.test/);
+    assert.equal(b.get('scanBtn').disabled, false, 'the user can retry from the correct site');
 });
 
 test('validated finalization is not downgraded by later non-finalized or failed status lookups', async () => {

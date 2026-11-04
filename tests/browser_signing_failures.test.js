@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 const signerKeys = require('../sdk/lib/signer_key');
+const passkeyDomain = require('../sdk/lib/passkey_domain');
 const passkeySecret = () => new Uint8Array(32).fill(5);
 
 const source = fs.readFileSync(path.join(__dirname, '../browser-client/src/main.js'), 'utf8');
@@ -36,23 +37,25 @@ function browser(overrides = {}) {
         if (!elements.has(id)) elements.set(id, element());
         return elements.get(id);
     };
-    const calls = { proofs: [], requests: [], unlocks: 0, creates: 0 };
+    const calls = { proofs: [], requests: [], unlocks: 0, creates: 0, passkeyOptions: [] };
     let loaded;
     const context = vm.createContext({
         require(name) {
             if (name === '@noble/hashes/sha2.js') return { sha256: bytes => crypto.createHash('sha256').update(bytes).digest() };
             if (name === '../../sdk/lib/signer_key') return signerKeys;
             if (name === '../../sdk/lib/passkey') return {
-                getPasskeySecret: async () => { calls.unlocks++; return overrides.getPasskeySecret ? overrides.getPasskeySecret() : passkeySecret(); },
-                createSignerPasskey: async () => { calls.creates++; return { credentialId: 'AQID' }; },
+                getPasskeySecret: async options => { calls.unlocks++; calls.passkeyOptions.push(options); return overrides.getPasskeySecret ? overrides.getPasskeySecret() : passkeySecret(); },
+                createSignerPasskey: async options => { calls.creates++; calls.passkeyOptions.push(options); return { credentialId: 'AQID' }; },
             };
+            if (name === '../../sdk/lib/passkey_domain') return passkeyDomain;
+            if (name === './passkey_config') return overrides.passkeyConfig || { rpId: 'example.test', testMode: false };
             if (name === 'snarkjs') return { groth16: { async fullProve(input) {
                 calls.proofs.push(input);
                 return overrides.prove ? overrides.prove(input) : generatedProof;
             } } };
             return {};
         },
-        window: { addEventListener: (_, handler) => { loaded = handler; } }, Buffer, Uint8Array, TextEncoder,
+        window: { location: { hostname: overrides.hostname || 'app.example.test' }, addEventListener: (_, handler) => { loaded = handler; } }, Buffer, Uint8Array, TextEncoder,
         document: { getElementById, createElement: () => element() },
         fetch: async (url, options) => {
             calls.requests.push({ url, options });
@@ -300,4 +303,39 @@ test('creating a passkey registers it and then unlocks it in one step', async ()
     assert.equal(b.calls.unlocks, 1);
     assert.equal(vm.runInContext('signerUnlocked', b.context), true);
     assert.match(b.logs(), /Passkey created/);
+});
+
+test('passkeys are only created and unlocked under the configured permanent domain', async () => {
+    const b = browser();
+    vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
+    await b.context.window.createPasskey();
+    assert.equal(b.calls.creates, 1);
+    for (const options of b.calls.passkeyOptions) assert.equal(options.rpId, 'example.test');
+    assert.doesNotMatch(b.logs(), /temporary/);
+});
+
+test('a page outside the passkey domain, or a build without one, never reaches WebAuthn', async () => {
+    for (const [hostname, passkeyConfig, message] of [
+        ['example.test.evil.com', { rpId: 'example.test' }, /not the passkey domain example\.test/],
+        ['oblivia.netlify.app', { rpId: '' }, /No permanent passkey domain is configured/],
+    ]) {
+        const b = browser({ hostname, passkeyConfig });
+        vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
+        await b.context.window.createPasskey();
+        await b.context.window.unlockSigner();
+        assert.equal(b.calls.creates, 0);
+        assert.equal(b.calls.unlocks, 0);
+        assert.equal(vm.runInContext('signerUnlocked', b.context), false);
+        assert.equal(b.element('signBtn').disabled, true);
+        assert.match(b.logs(), message);
+    }
+});
+
+test('explicit test builds work on any host and say the signer is temporary', async () => {
+    const b = browser({ hostname: 'random-name.netlify.app', passkeyConfig: { rpId: '', testMode: true } });
+    vm.runInContext('signerUnlocked = false; signerSecret = null;', b.context);
+    await b.context.window.createPasskey();
+    assert.equal(b.calls.creates, 1);
+    assert.equal(b.calls.passkeyOptions[0].rpId, undefined);
+    assert.match(b.logs(), /Test build: passkeys created here are temporary/);
 });

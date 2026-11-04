@@ -21,6 +21,10 @@ Oblivia is an on-chain ZK verification and contract-binding primitive. It proves
 
 Oblivia stores no copy and runs no recovery service. If the key store is lost, that signer is lost; the user creates a new one. The security of a signer is the security of its passkey provider or key store.
 
+**Passkey domain.** A passkey belongs to the domain it was created on. If the signing app moves to a different domain, users cannot reach their existing passkeys and get new signer identities; past signatures stay valid. The reference clients refuse to create or unlock passkeys unless the build names a permanent production domain, and only on that domain or its subdomains.
+
+**Compromised signing site.** Anyone who can run script on the signing domain (a cross-site scripting bug, a compromised dependency or a hijacked host) can request the passkey's signing secret during a genuine Face ID / Touch ID prompt and then sign as that user. This risk applies to every browser-based wallet. Mitigations: no third-party scripts, a strict Content Security Policy, pinned and reviewed dependencies, and a minimal, separately hosted signing page.
+
 **Biometrics.** Biometrics never reach Oblivia. The operating system performs user verification and only releases the PRF output. Earlier prototypes derived keys from facial geometry. That approach was removed: the quantized features had at most about 40 bits of entropy and the same face did not reliably reproduce the same key.
 
 ## Explicit non-goals
@@ -40,3 +44,4 @@ Oblivia stores no copy and runs no recovery service. If the key store is lost, t
 - The reference relay is publicly callable with in-memory rate limits only.
 - Devnet only.
 - WebAuthn PRF support varies by platform and passkey provider. Unsupported providers fail closed with a clear error.
+- The deployed Devnet program still contains the removed v1 `verify_groth16` instruction until the next upgrade.

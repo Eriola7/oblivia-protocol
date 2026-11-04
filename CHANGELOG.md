@@ -4,12 +4,17 @@ Notable protocol-level changes. SDK releases have their own log in [sdk/CHANGELO
 
 ## Unreleased
 
+### Removed
+- The v1 `verify_groth16` instruction from the program source. **Takes effect on Devnet at the next upgrade.**
+
 ### Changed
 - **Breaking:** signer keys now come from a passkey (WebAuthn PRF) or a caller-supplied secret, not from biometric measurements. Face ID / Touch ID only unlocks the passkey, and backup and recovery come from the platform keychain. Existing signatures remain valid; signers get new key commitments.
 - `@oblivia/sdk` is installable as a standalone package.
 - The Devnet smoke test now simulates well-formed forged and replayed proofs, uses random signers, and reports only observed results.
 
 ### Added
+- Adversarial proof-verification tests: malformed encodings, off-curve and identity points, non-canonical inputs, and well-formed forgeries. They run in CI without a Solana toolchain.
+- The reference clients require a permanent passkey domain (`OBLIVIA_RP_ID`) before creating or unlocking signers. Explicit test builds (`OBLIVIA_PASSKEY_TEST=1`) are labelled as temporary.
 - Production trusted-setup tooling and plan ([docs/CEREMONY.md](docs/CEREMONY.md)), audit scope, and threat model.
 - CI for tests, the packaged SDK, the browser build and the program build.
 - Contributing guide, security policy, code of conduct, support guide, and issue and pull request templates.

@@ -94,7 +94,7 @@ npm run build:browser
 Program checks require the Rust, Anchor, and Solana build toolchains separately; `setup:test` does not install them:
 
 ```bash
-npm run test:program
+npm run test:program      # cargo check + adversarial proof-verification tests (no Solana toolchain needed)
 npm run test:multisig
 ```
 
@@ -107,7 +107,7 @@ The current v2 entrypoints are:
 - `verify_groth16_v2` — validates the Groth16 proof and atomically records the contract-bound anonymous signature.
 - `record_verified_multisig` — records a verified signer for a multisig agreement and finalizes it automatically at the threshold.
 
-Older instructions are retained only so the deployed program and IDL stay in sync: the commitment-only `submit_signature` and `submit_multisig_signature` fail closed, and the v1 `verify_groth16` verifies a superseded, non-contract-bound key without recording anything. New integrations must use the v2 path.
+The v1 `verify_groth16` instruction, which checked proofs against a superseded key that was not bound to a contract, has been **removed from the program source**. It never recorded signatures, but it should not ship. **The currently deployed Devnet program still contains it until the next upgrade.** The commitment-only `submit_signature` and `submit_multisig_signature` remain and fail closed. New integrations must use the v2 path.
 
 The patched multisig counter requires a program-owned `SignerRecord` PDA and a verified `ObliviaSignature` receipt for the exact contract and key commitment. The relay submits verification and counting atomically. The low-level `record_verified_multisig` instruction can also count an existing verified receipt later, but only once; the current relay/SDK signing helpers always submit a fresh verification and therefore cannot reuse a key that has already signed that contract singly. The local VM tests exercise missing/forged/mismatched records and receipts, duplicate counting, threshold finalization, a real development proof, and invalid-proof rollback.
 
@@ -136,6 +136,19 @@ Transactions: [setup](https://explorer.solana.com/tx/5dRdk3aegZxXgtUP8so1SdT6ChG
 Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
 
 Agreement settings are first-created and immutable for a contract hash. Relay and SDK creation reject conflicting threshold/maximum settings rather than silently reusing them. This detects conflicts; it does not prevent another party from registering settings first. Use distinct agreement text for distinct agreements. Participant eligibility and stronger agreement authorization remain unresolved design work.
+
+## Passkey domain
+
+A passkey belongs to one domain (its relying-party ID). Signers created on a temporary address cannot be used after the app moves, so the reference clients refuse to create or unlock passkeys unless the build names the permanent production domain:
+
+```bash
+OBLIVIA_RP_ID=example.com npm --prefix browser-client run build   # production: signers bound to example.com
+OBLIVIA_PASSKEY_TEST=1 npm --prefix browser-client run build      # throwaway test signers on any host, clearly labelled
+```
+
+A production build works on that domain and any of its subdomains (`sign.example.com`, `app.example.com`), so the app can move between subdomains without changing anyone's signer. On any other host it refuses before contacting the passkey provider. Local development on `localhost` needs neither variable.
+
+**Choose and own the production domain before creating real signers.** Changing it later gives every user a new signer identity. Past signatures stay valid on-chain, but continuity is lost.
 
 ## Development notes
 

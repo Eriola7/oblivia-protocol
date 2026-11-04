@@ -166,8 +166,10 @@ test('browser prevents overlapping passkey unlocks and allows retry after an unl
     const context = vm.createContext({
         require: name => name === '../../sdk/lib/passkey'
             ? { getPasskeySecret: () => { unlocks++; return new Promise((_, reject) => { rejectUnlock = reject; }); } }
+            : name === '../../sdk/lib/passkey_domain' ? require('../sdk/lib/passkey_domain')
+            : name === './passkey_config' ? { rpId: 'example.test' }
             : {},
-        window: { addEventListener() {} },
+        window: { location: { hostname: 'example.test' }, addEventListener() {} },
         document: { getElementById: id => id === 'scanBtn' ? scanBtn : id === 'bioStatus' ? status : null },
     });
     vm.runInContext(fs.readFileSync(path.join(root, 'browser-client/src/multisig.js'), 'utf8'), context);

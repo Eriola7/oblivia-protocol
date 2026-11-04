@@ -15,6 +15,10 @@ module.exports = {
     plugins: [
         new HtmlWebpackPlugin({ template: './src/index.html', filename: 'index.html', chunks: ['main'] }),
         new HtmlWebpackPlugin({ template: './src/multisig.html', filename: 'multisig.html', chunks: ['multisig'] }),
+        new webpack.DefinePlugin({
+            __OBLIVIA_RP_ID__: JSON.stringify(process.env.OBLIVIA_RP_ID || ''),
+            __OBLIVIA_PASSKEY_TEST__: JSON.stringify(process.env.OBLIVIA_PASSKEY_TEST === '1'),
+        }),
         new webpack.ProvidePlugin({
             Buffer: ['buffer', 'Buffer'],
             process: 'process/browser',
@@ -38,7 +42,6 @@ module.exports = {
     },
     resolve: {
         conditionNames: ['browser', 'require', 'default'],
-        alias: { '@aztec/bb.js': path.resolve(__dirname, 'node_modules/@aztec/bb.js/dest/browser/index.js') },
         fallback: {
             fs: false,
             net: false,

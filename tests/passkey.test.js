@@ -95,3 +95,20 @@ test('the PRF secret feeds the signer key derivation deterministically', async (
     const deviceB = await loadPasskey({ credentials: credentials() }).getPasskeySecret();
     assert.equal(deriveSignerKey(deviceA), deriveSignerKey(deviceB));
 });
+
+test('passkey domain policy: permanent domain, subdomains, localhost and explicit test builds only', () => {
+    const { checkPasskeyDomain } = require('../sdk/lib/passkey_domain');
+    const prod = { rpId: 'Oblivia.example' };
+    assert.deepEqual({ ...checkPasskeyDomain(prod, 'oblivia.example') }, { rpId: 'oblivia.example', temporary: false });
+    assert.equal(checkPasskeyDomain(prod, 'sign.oblivia.example').rpId, 'oblivia.example', 'subdomains share the signer');
+    for (const host of ['evil-oblivia.example', 'oblivia.example.evil.com', 'example', '']) {
+        assert.throws(() => checkPasskeyDomain(prod, host), { name: 'PasskeyDomainError' }, host);
+    }
+    for (const rpId of ['https://oblivia.example', 'oblivia.example:443', 'oblivia.example/app', 'localhost', '*.example']) {
+        assert.throws(() => checkPasskeyDomain({ rpId }, 'oblivia.example'), /not a valid domain/, rpId);
+    }
+    for (const host of ['localhost', '127.0.0.1']) assert.equal(checkPasskeyDomain({}, host).temporary, true);
+    assert.throws(() => checkPasskeyDomain({}, 'oblivia.netlify.app'), /No permanent passkey domain/);
+    assert.throws(() => checkPasskeyDomain({ testMode: 'yes' }, 'oblivia.netlify.app'), /No permanent passkey domain/);
+    assert.equal(checkPasskeyDomain({ testMode: true }, 'oblivia.netlify.app').temporary, true);
+});
