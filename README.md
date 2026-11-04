@@ -106,7 +106,16 @@ Older instructions are retained only so the deployed program and IDL stay in syn
 
 The patched multisig counter requires a program-owned `SignerRecord` PDA and a verified `ObliviaSignature` receipt for the exact contract and key commitment. The relay submits verification and counting atomically. The low-level `record_verified_multisig` instruction can also count an existing verified receipt later, but only once; the current relay/SDK signing helpers always submit a fresh verification and therefore cannot reuse a key that has already signed that contract singly. The local VM tests exercise missing/forged/mismatched records and receipts, duplicate counting, threshold finalization, a real development proof, and invalid-proof rollback.
 
-A live Devnet 2-of-2 release check accepted two fresh proofs and finalized the agreement. Read-only simulations against that test agreement rejected an unverified count and a duplicate count. [Final threshold transaction](https://explorer.solana.com/tx/2hjZ1JS93XP3DngYWpavasaY2qY1oBsspF7NxKSc9phNX2YZi5RH8N3zHQZ6Z87HvDWhdG3Ba5SV59z37QLm7rkP?cluster=devnet). Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
+**Devnet smoke test.** `zk_groth16/e2e_multisig_devnet.js` creates a fresh 2-of-2 agreement with two random signers whose keys go through the SDK's key derivation. Before anything is counted, it simulates (never sends) four well-formed attacks against that agreement. Each must be rejected with `InvalidProof`, and the simulations must leave no state behind:
+
+- a genuine proof with a substituted public input
+- a proof swapped between signers
+- mixed proof points
+- a valid proof replayed from another contract
+
+The proof points are valid curve points, so the first three can only fail at the pairing check and the replay at the contract-hash comparison (`tests/release_check_cases.test.js` checks this offline). The script also checks a count with no verification at all, which shows the counting gate exists but does not test proofs. It then signs both genuine signers, rejects a duplicate count and confirms finalization. Every value in its JSON output is observed, not hard-coded, and it exits non-zero if any check fails.
+
+This is a smoke test of the deployed program, not a security audit. The forged-proof checks were added after the last recorded run ([final threshold transaction](https://explorer.solana.com/tx/2hjZ1JS93XP3DngYWpavasaY2qY1oBsspF7NxKSc9phNX2YZi5RH8N3zHQZ6Z87HvDWhdG3Ba5SV59z37QLm7rkP?cluster=devnet)) and have not yet been run against Devnet. Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
 
 Agreement settings are first-created and immutable for a contract hash. Relay and SDK creation reject conflicting threshold/maximum settings rather than silently reusing them. This detects conflicts; it does not prevent another party from registering settings first. Use distinct agreement text for distinct agreements. Participant eligibility and stronger agreement authorization remain unresolved design work.
 

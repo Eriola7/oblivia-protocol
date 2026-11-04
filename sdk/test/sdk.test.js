@@ -45,13 +45,11 @@ test('Node proof is locally verified and binds the full contract hash', { timeou
 
 test('browser proof uses the same key commitment as the Node proof', { timeout: 120000 }, async () => {
     const proving = path.join(path.dirname(require.resolve('@oblivia/sdk')), 'lib/proving');
-    const [nodeProof, browserProof] = await Promise.all([
-        oblivia.generateProof(secret, contract),
-        browser.generateProof(secret, contract, {
-            wasmUrl: path.join(proving, 'oblivia.wasm'),
-            zkeyUrl: path.join(proving, 'oblivia_1.zkey'),
-        }),
-    ]);
+    const nodeProof = await oblivia.generateProof(secret, contract);
+    const browserProof = await browser.generateProof(secret, contract, {
+        wasmUrl: path.join(proving, 'oblivia.wasm'),
+        zkeyUrl: path.join(proving, 'oblivia_1.zkey'),
+    });
     assert.equal(browserProof.verified, true);
     assert.equal(BigInt(browserProof.publicInputs[0]),
         BigInt('0x' + Buffer.from(nodeProof.keyCommitment).toString('hex')));

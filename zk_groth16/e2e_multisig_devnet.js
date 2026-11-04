@@ -1,13 +1,15 @@
-// Devnet-only release check. Uses a dedicated test payer, never the upgrade key.
+// Devnet release smoke test. Uses a dedicated test payer, never the upgrade key.
 // OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node e2e_multisig_devnet.js
+//
+// Scope: confirms the deployed program accepts genuine proofs, rejects a set of
+// well-formed forged/replayed proofs, and counts a 2-of-2 agreement correctly.
+// It is not a security audit or exhaustive adversarial test. Every reported
+// result is an observed value; nothing in the output is a hard-coded claim.
 const fs = require('node:fs');
-const path = require('node:path');
 const crypto = require('node:crypto');
-const assert = require('node:assert/strict');
-const snarkjs = require('snarkjs');
 const anchor = require('@coral-xyz/anchor');
 const { Connection, Keypair, PublicKey, SystemProgram, Transaction } = require('@solana/web3.js');
-const { toAnchorArguments } = require('./anchor_proof_format');
+const { proveFor, negativeCases, randomContractHash } = require('./release_check_cases');
 
 async function main() {
   if (!process.env.OBLIVIA_E2E_KEYPAIR) throw new Error('Set OBLIVIA_E2E_KEYPAIR to a dedicated Devnet test payer');
@@ -17,7 +19,16 @@ async function main() {
   const program = new anchor.Program(require('../sdk/lib/idl.json'), provider);
   const pda = (...seeds) => PublicKey.findProgramAddressSync(seeds, program.programId)[0];
   const seed = text => Buffer.from(text);
-  const hash = crypto.createHash('sha256').update('Oblivia multisig release check ' + crypto.randomBytes(32).toString('hex')).digest();
+
+  // Fresh contract and fresh random signers on every run.
+  const hash = randomContractHash('Oblivia multisig release check');
+  const otherHash = randomContractHash('Oblivia replay source');
+  const secrets = [crypto.randomBytes(32), crypto.randomBytes(32)];
+  // Sequential: concurrent first use makes snarkjs start duplicate worker pools.
+  const genuineA = await proveFor(secrets[0], hash);
+  const genuineB = await proveFor(secrets[1], hash);
+  const replay = await proveFor(crypto.randomBytes(32), otherHash);
+
   const registry = pda(seed('oblivia_registry'));
   const contract = pda(seed('oblivia_contract'), hash);
   const multisig = pda(seed('oblivia_multisig'), hash);
@@ -26,50 +37,83 @@ async function main() {
   const create = await program.methods.createMultisig([...hash], 2, 2).accounts({ ...common, multisig }).instruction();
   const setup = await provider.sendAndConfirm(new Transaction().add(register, create));
 
+  const signaturePda = (key, sig) => pda(seed('oblivia_signature'), contract.toBuffer(), Buffer.from(key), Buffer.from(sig));
+  const recordPda = key => pda(seed('oblivia_signer_record'), hash, Buffer.from(key));
+
+  async function verifyInstruction(args) {
+    return program.methods.verifyGroth16V2(args.proofA, args.proofB, args.proofC, args.publicInputs, args.keyCommitment, args.signatureCommitment)
+      .accounts({ ...common, signature: signaturePda(args.keyCommitment, args.signatureCommitment), signerRecord: recordPda(args.keyCommitment) })
+      .instruction();
+  }
   async function countInstruction(key, signatureCommitment) {
     return program.methods.recordVerifiedMultisig([...hash], [...key]).accounts({
       ...common, multisig,
-      signerRecord: pda(seed('oblivia_signer_record'), hash, key),
-      signature: pda(seed('oblivia_signature'), contract.toBuffer(), key, signatureCommitment),
-      multisigMember: pda(seed('oblivia_multisig_member'), multisig.toBuffer(), key),
+      signerRecord: recordPda(key),
+      signature: signaturePda(key, signatureCommitment),
+      multisigMember: pda(seed('oblivia_multisig_member'), multisig.toBuffer(), Buffer.from(key)),
     }).instruction();
   }
-  async function expectRejected(ix, expectedLog) {
-    const tx = new Transaction().add(ix);
+  async function simulate(instructions) {
+    const tx = new Transaction().add(...instructions);
     tx.feePayer = payer.publicKey;
     tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     tx.sign(payer);
     const { value } = await connection.simulateTransaction(tx);
-    assert.ok(value.err, 'Unauthorized/duplicate count unexpectedly accepted');
-    assert.ok((value.logs || []).some(line => line.includes(expectedLog)), JSON.stringify(value));
+    return { err: value.err, logs: value.logs || [] };
   }
-  // Only simulate against this newly created test agreement. No attack is sent.
-  await expectRejected(await countInstruction(Buffer.alloc(32, 9), Buffer.alloc(32, 8)), 'AccountNotInitialized');
-  assert.equal((await program.account.multiSigContract.fetch(multisig)).signaturesCollected, 0);
+
+  const checks = [];
+  async function expectRejected(name, detail, instructions, expectedLog, rejectedBy) {
+    const { err, logs } = await simulate(instructions);
+    const matchedLog = logs.find(line => line.includes(expectedLog)) || null;
+    checks.push({ check: name, detail, expected: `rejected with ${expectedLog} (${rejectedBy})`, rejected: Boolean(err), matchedLog, passed: Boolean(err) && matchedLog !== null });
+  }
+  async function stateNow() {
+    const s = await program.account.multiSigContract.fetch(multisig);
+    return { collected: s.signaturesCollected, threshold: s.threshold, finalized: s.finalized };
+  }
+
+  // Simulations only, against this new test agreement. No attack is sent.
+  for (const attack of negativeCases({ a: genuineA, b: genuineB, replay })) {
+    const ixs = [await verifyInstruction(attack.args), await countInstruction(attack.args.keyCommitment, attack.args.signatureCommitment)];
+    await expectRejected(attack.name, attack.detail, ixs, attack.expectedError, attack.rejectedBy);
+  }
+  await expectRejected('count without verification',
+    'No proof submitted. Shows the counting gate requires a verified record; it does not test proof validity.',
+    [await countInstruction(Buffer.alloc(32, 9), Buffer.alloc(32, 8))], 'AccountNotInitialized', 'missing signer record');
+
+  const afterAttacks = await stateNow();
+  checks.push({ check: 'no state change from rejected attempts', detail: 'collected count still 0 after all simulations', observed: afterAttacks, passed: afterAttacks.collected === 0 && !afterAttacks.finalized });
 
   const transactions = [];
-  for (let i = 0; i < 2; i++) {
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve({
-      signer_key: String(12345678 + i), timestamp: Date.now().toString(),
-      contract_hash_lo: BigInt('0x' + hash.subarray(0, 16).toString('hex')).toString(),
-      contract_hash_hi: BigInt('0x' + hash.subarray(16).toString('hex')).toString(),
-    }, path.join(__dirname, 'oblivia_js/oblivia.wasm'), path.join(__dirname, 'oblivia_1.zkey'));
-    assert.equal(await snarkjs.groth16.verify(require('./verification_key.json'), publicSignals, proof), true);
-    const args = toAnchorArguments(proof, publicSignals);
-    const key = Buffer.from(args.keyCommitment);
-    const verify = await program.methods.verifyGroth16V2(args.proofA, args.proofB, args.proofC, args.publicInputs, args.keyCommitment, args.signatureCommitment).accounts({
-      ...common,
-      signature: pda(seed('oblivia_signature'), contract.toBuffer(), key, Buffer.from(args.signatureCommitment)),
-      signerRecord: pda(seed('oblivia_signer_record'), hash, key),
-    }).instruction();
-    const count = await countInstruction(key, Buffer.from(args.signatureCommitment));
-    transactions.push(await provider.sendAndConfirm(new Transaction().add(verify, count)));
-    const state = await program.account.multiSigContract.fetch(multisig);
-    assert.equal(state.signaturesCollected, i + 1);
-    assert.equal(state.finalized, i === 1);
-    if (i === 0) await expectRejected(count, 'already in use');
+  for (const [i, genuine] of [genuineA, genuineB].entries()) {
+    const key = Buffer.from(genuine.args.keyCommitment);
+    const count = await countInstruction(key, Buffer.from(genuine.args.signatureCommitment));
+    transactions.push(await provider.sendAndConfirm(new Transaction().add(await verifyInstruction(genuine.args), count)));
+    const observed = await stateNow();
+    checks.push({ check: `genuine signer ${i + 1} counted`, observed, passed: observed.collected === i + 1 && observed.finalized === (i === 1) });
+    if (i === 0) await expectRejected('duplicate count', 'the same verified key counted a second time', [count], 'already in use', 'multisig member PDA');
   }
-  console.log(JSON.stringify({ cluster: 'devnet', program: program.programId.toBase58(), contract: contract.toBase58(), multisig: multisig.toBase58(), setup, transactions, unverifiedCountRejected: true, duplicateRejected: true, collected: 2, finalized: true }, null, 2));
+
+  const leaked = [];
+  for (const attack of negativeCases({ a: genuineA, b: genuineB, replay })) {
+    const forged = attack.args;
+    const sameAsGenuine = [genuineA, genuineB].some(g =>
+      Buffer.from(g.args.keyCommitment).equals(Buffer.from(forged.keyCommitment)) &&
+      Buffer.from(g.args.signatureCommitment).equals(Buffer.from(forged.signatureCommitment)));
+    if (sameAsGenuine) continue; // e.g. the swap case reuses B's genuine commitments, which B then legitimately recorded
+    if (await connection.getAccountInfo(signaturePda(forged.keyCommitment, forged.signatureCommitment))) leaked.push(attack.name);
+  }
+  checks.push({ check: 'no receipt exists for any forged commitment', observed: { receiptsFound: leaked }, passed: leaked.length === 0 });
+
+  const allPassed = checks.every(c => c.passed);
+  console.log(JSON.stringify({
+    scope: 'Devnet smoke test: genuine flow plus simulated well-formed forgeries. Not a security audit.',
+    cluster: 'devnet', program: program.programId.toBase58(), contract: contract.toBase58(), multisig: multisig.toBase58(),
+    setup, transactions, checks, finalState: await stateNow(), allPassed,
+  }, null, 2));
+  if (!allPassed) process.exitCode = 1;
 }
+
 main().catch(error => { console.error(error.message); process.exitCode = 1; })
   .finally(async () => { if (globalThis.curve_bn128) await globalThis.curve_bn128.terminate(); });
