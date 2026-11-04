@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Eriola7/oblivia-protocol/security/advisories/new
+    about: Report privately. Do not open a public issue for vulnerabilities.
+  - name: Documentation and troubleshooting
+    url: https://github.com/Eriola7/oblivia-protocol/blob/main/SUPPORT.md
+    about: Common problems and where to find answers.

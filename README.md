@@ -1,5 +1,10 @@
 # Oblivia Protocol
 
+[![CI](https://github.com/Eriola7/oblivia-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/Eriola7/oblivia-protocol/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Network: Solana Devnet](https://img.shields.io/badge/network-Solana%20Devnet-9945FF)
+![Status: unaudited](https://img.shields.io/badge/status-unaudited-orange)
+
 > **Devnet status:** the contract-bound Groth16 v2 verifier is deployed to Solana Devnet at `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`.
 
 Oblivia is an open-source, zero-identity contract-signing primitive for Solana: on-chain Groth16 verification plus contract binding. A signer proves knowledge of a private signing key and its binding to the exact bytes of a contract without publishing the key.
@@ -123,6 +128,18 @@ Agreement settings are first-created and immutable for a contract hash. Relay an
 
 The relay and reference clients must be deployed and configured together. The reference relay is publicly callable and has no API-key authentication. Set `OBLIVIA_ALLOWED_ORIGINS` to the actual reference-app origins; CORS restricts browser access, not arbitrary clients. Basic in-memory rate limits are not production sponsorship or abuse protection. Do not use this Devnet configuration as production infrastructure.
 
+## Contributing and support
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — setup, conventions and review process
+- [SECURITY.md](SECURITY.md) — report vulnerabilities privately; do not open public issues for them
+- [SUPPORT.md](SUPPORT.md) — getting help and common problems
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [CHANGELOG.md](CHANGELOG.md)
+
+## Built with
+
+Circom and snarkjs (Groth16 on BN254) · Solana and Anchor (Rust) · Node.js · WebAuthn passkeys
+
 ## License
 
-MIT
+[MIT](LICENSE)
