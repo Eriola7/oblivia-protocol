@@ -442,6 +442,15 @@ fn real_proof_counts_and_invalid_proof_rolls_back() {
     .concat()
     .try_into()
     .unwrap();
+    // Well-formed forgery: A without the negation the verifier expects. Both
+    // coordinates are valid, so only the pairing equation can reject it.
+    let a_not_negated: [u8; 64] = [
+        coordinate(&proof["pi_a"][0]).as_slice(),
+        coordinate(&proof["pi_a"][1]).as_slice(),
+    ]
+    .concat()
+    .try_into()
+    .unwrap();
     let c: [u8; 64] = [coordinate(&proof["pi_c"][0]), coordinate(&proof["pi_c"][1])]
         .concat()
         .try_into()
@@ -491,7 +500,7 @@ fn real_proof_counts_and_invalid_proof_rolls_back() {
             }
             .to_account_metas(None),
             data: instruction::VerifyGroth16V2 {
-                proof_a: if case == "invalid_proof" { [0; 64] } else { a },
+                proof_a: if case == "invalid_proof" { a_not_negated } else { a },
                 proof_b: b,
                 proof_c: c,
                 pub_inputs: inputs,

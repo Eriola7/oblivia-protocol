@@ -4,7 +4,6 @@ pub mod initialize;
 pub mod register_contract;
 pub mod submit_multisig_signature;
 pub mod submit_signature;
-pub mod verify_groth16;
 pub mod verify_groth16_multisig_v2;
 pub mod verify_groth16_v2;
 pub mod verify_signature;

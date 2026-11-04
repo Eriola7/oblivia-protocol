@@ -23,6 +23,38 @@ fn contract_hash_limbs(hash: [u8; 32]) -> ([u8; 32], [u8; 32]) {
     (low, high)
 }
 
+/// Every check that decides whether a contract-bound proof is accepted.
+/// Kept free of account access so the exact production logic can be tested
+/// directly with real and adversarial proofs.
+pub fn verify_contract_bound_proof(
+    contract_hash: [u8; 32],
+    proof_a_neg: &[u8; 64],
+    proof_b: &[u8; 128],
+    proof_c: &[u8; 64],
+    pub_inputs: &[u8; 128],
+    key_commitment: &[u8; 32],
+    signature_commitment: &[u8; 32],
+) -> Result<()> {
+    let inputs: [[u8; 32]; 4] =
+        core::array::from_fn(|i| pub_inputs[i * 32..(i + 1) * 32].try_into().unwrap());
+    let (low, high) = contract_hash_limbs(contract_hash);
+    require!(
+        inputs[2] == low && inputs[3] == high,
+        ObliviaError::InvalidProof
+    );
+    require!(
+        inputs[0] == *key_commitment && inputs[1] == *signature_commitment,
+        ObliviaError::InvalidProof
+    );
+    let mut verifier =
+        Groth16Verifier::new(proof_a_neg, proof_b, proof_c, &inputs, &VERIFYING_KEY)
+            .map_err(|_| error!(ObliviaError::InvalidProof))?;
+    verifier
+        .verify()
+        .map_err(|_| error!(ObliviaError::InvalidProof))?;
+    Ok(())
+}
+
 pub fn verify_groth16_v2_handler(
     ctx: Context<VerifyGroth16V2>,
     proof_a_neg: [u8; 64],
@@ -32,23 +64,15 @@ pub fn verify_groth16_v2_handler(
     key_commitment: [u8; 32],
     signature_commitment: [u8; 32],
 ) -> Result<()> {
-    let inputs: [[u8; 32]; 4] =
-        core::array::from_fn(|i| pub_inputs[i * 32..(i + 1) * 32].try_into().unwrap());
-    let (low, high) = contract_hash_limbs(ctx.accounts.contract.contract_hash);
-    require!(
-        inputs[2] == low && inputs[3] == high,
-        ObliviaError::InvalidProof
-    );
-    require!(
-        inputs[0] == key_commitment && inputs[1] == signature_commitment,
-        ObliviaError::InvalidProof
-    );
-    let mut verifier =
-        Groth16Verifier::new(&proof_a_neg, &proof_b, &proof_c, &inputs, &VERIFYING_KEY)
-            .map_err(|_| error!(ObliviaError::InvalidProof))?;
-    verifier
-        .verify()
-        .map_err(|_| error!(ObliviaError::InvalidProof))?;
+    verify_contract_bound_proof(
+        ctx.accounts.contract.contract_hash,
+        &proof_a_neg,
+        &proof_b,
+        &proof_c,
+        &pub_inputs,
+        &key_commitment,
+        &signature_commitment,
+    )?;
     let now = Clock::get()?.unix_timestamp;
     ctx.accounts.signature.key_commitment = key_commitment;
     ctx.accounts.signature.signature_commitment = signature_commitment;

@@ -11,7 +11,7 @@ Oblivia is **Devnet-only and unaudited**. The Groth16 proving key is a developme
 | Devnet program `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG` (v2) | Yes |
 | `@oblivia/sdk` latest 0.x release | Yes |
 | `main` branch | Yes |
-| Earlier SDK versions, the v1 verifier, `archive/*` branches | No |
+| Earlier SDK versions, the removed v1 verifier, `archive/*` branches | No |
 
 ## Reporting a vulnerability
 

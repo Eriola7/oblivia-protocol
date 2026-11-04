@@ -7,7 +7,7 @@
     "test": "node --test tests/*.test.js && npm --prefix zk_groth16 run test:binding",
     "test:regressions": "node --test tests/*.test.js",
     "test:multisig": "cd oblivia-contracts && anchor build && cargo test -p oblivia-contracts --test multisig_proof_gate",
-    "test:program": "cd oblivia-contracts && cargo check -p oblivia-contracts",
+    "test:program": "cd oblivia-contracts && cargo check -p oblivia-contracts && cargo test -p oblivia-contracts --test proof_verification",
     "build:browser": "npm --prefix browser-client run build"
   },
   "repository": {

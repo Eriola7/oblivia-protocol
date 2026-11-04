@@ -23,7 +23,7 @@ Other checks:
 ```bash
 npm --prefix sdk test                                  # SDK package tests
 npm --prefix browser-client ci && npm run build:browser
-npm run test:program                                   # cargo check (Rust)
+npm run test:program                                   # cargo check + proof-verification tests (Rust)
 npm run test:multisig                                  # program VM tests (needs anchor build)
 ```
 

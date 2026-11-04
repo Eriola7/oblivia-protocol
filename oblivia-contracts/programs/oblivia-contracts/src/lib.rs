@@ -13,7 +13,6 @@ pub use instructions::initialize::*;
 pub use instructions::register_contract::*;
 pub use instructions::submit_multisig_signature::*;
 pub use instructions::submit_signature::*;
-pub use instructions::verify_groth16::*;
 pub use instructions::verify_groth16_multisig_v2::*;
 pub use instructions::verify_groth16_v2::*;
 pub use instructions::verify_signature::*;
@@ -75,18 +74,6 @@ pub mod oblivia_contracts {
             ctx,
             key_commitment,
             signature_commitment,
-        )
-    }
-
-    pub fn verify_groth16(
-        ctx: Context<VerifyGroth16>,
-        proof_a: [u8; 64],
-        proof_b: [u8; 128],
-        proof_c: [u8; 64],
-        pub_inputs: [u8; 64],
-    ) -> Result<()> {
-        instructions::verify_groth16::verify_groth16_handler(
-            ctx, proof_a, proof_b, proof_c, pub_inputs,
         )
     }
 

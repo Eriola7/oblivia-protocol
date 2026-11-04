@@ -58,5 +58,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: oblivia-contracts
-      - name: cargo check
+      - name: cargo check and adversarial proof-verification tests
         run: npm run test:program
+
+  program-vm:
+    name: Program tests in a local Solana VM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain from rust-toolchain.toml
+        working-directory: oblivia-contracts
+        run: rustup toolchain install
+      - name: Install Solana build tools
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: oblivia-contracts
+      - name: Build the program for the VM
+        working-directory: oblivia-contracts
+        run: cargo build-sbf --manifest-path programs/oblivia-contracts/Cargo.toml
+      - name: Run the in-VM program tests
+        working-directory: oblivia-contracts
+        run: cargo test -p oblivia-contracts --test multisig_proof_gate
