@@ -133,9 +133,9 @@ This is a smoke test of the deployed program, not a security audit.
 
 Transactions: [setup](https://explorer.solana.com/tx/5dRdk3aegZxXgtUP8so1SdT6ChGUW2CXvCRZNDccEUSPXkGfbLDFdMAp4gxEK6riy1KMngdGUVfm7NBJAsYNWXGw?cluster=devnet), [signer 1](https://explorer.solana.com/tx/5jYxfmrL9B5NM9r2wcLxTKEqfuQVUR1AvuzkeUvM9eDU52W2ncyWcbjQz81PrWiTDCvmZxBoeNqnrMy3S9GHp2aq?cluster=devnet), [signer 2, finalizing](https://explorer.solana.com/tx/5YMKCQyrGHomjbYjnsqBM8vLvPkETHdvydEqGbKuuFtQVdrVhWWbxPUVe9Pn52FUxrp951zmceXdk43SqjnS8Xj7?cluster=devnet); [agreement account](https://explorer.solana.com/address/49mExCm3tXYNgXMJEr6UihXXzoCLgXpRV7ej1wbVVkMx?cluster=devnet).
 
-Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
+The script on `main` targets the next program upgrade (agreement settings in the address), so run it again after that upgrade; the run above used the previous version. Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
 
-Agreement settings are first-created and immutable for a contract hash. Relay and SDK creation reject conflicting threshold/maximum settings rather than silently reusing them. This detects conflicts; it does not prevent another party from registering settings first. Use distinct agreement text for distinct agreements. Participant eligibility and stronger agreement authorization remain unresolved design work.
+An agreement's threshold and maximum signer count are part of its on-chain address. The same contract with different settings is a separate agreement, so nobody can claim a contract's agreement first with settings its creator did not choose. Share links, status lookups and signatures always carry the settings. **This takes effect on Devnet at the next program upgrade**; agreements created before it use the old address format. Participant eligibility (who may sign) remains the integrating application's responsibility.
 
 ## Passkey domain
 

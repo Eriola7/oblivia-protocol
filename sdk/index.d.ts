@@ -115,10 +115,14 @@ export function createMultiSigContract(
  * counts several times. Restrict eligible signers in your application.
  * @param signerSecret - At least 32 bytes from a passkey, wallet or device seed.
  * @param contractData - The contract being signed.
+ * @param threshold - The agreement's threshold; with maxSigners it identifies the agreement on-chain.
+ * @param maxSigners - The agreement's maximum number of signers.
  */
 export function signMultiSig(
   signerSecret: SignerSecret,
-  contractData: string | Uint8Array
+  contractData: string | Uint8Array,
+  threshold: number,
+  maxSigners: number
 ): Promise<SignResult>;
 
 /**
@@ -126,9 +130,13 @@ export function signMultiSig(
  * Normally unnecessary: signing auto-finalizes at the threshold.
  * Returns a null transaction if already finalized; fails if below threshold.
  * @param contractData - The contract to finalize.
+ * @param threshold - The agreement's threshold.
+ * @param maxSigners - The agreement's maximum number of signers.
  */
 export function finalizeMultiSigContract(
-  contractData: string | Uint8Array
+  contractData: string | Uint8Array,
+  threshold: number,
+  maxSigners: number
 ): Promise<{ finalized: true; identityRevealed: false; transaction: string | null }>;
 
 /** One-time registry initialization; already performed on Devnet. */

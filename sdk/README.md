@@ -64,8 +64,9 @@ await oblivia.createMultiSigContract(contractData, 2, 3);
 
 // Each signer signs with their own secret. The same key cannot be counted twice
 // (enforced on-chain by PDA deduplication).
-await oblivia.signMultiSig(signer1Secret, contractData);
-await oblivia.signMultiSig(signer2Secret, contractData);
+// The settings identify the agreement (they are part of its on-chain address).
+await oblivia.signMultiSig(signer1Secret, contractData, 2, 3);
+await oblivia.signMultiSig(signer2Secret, contractData, 2, 3);
 
 // The second signature automatically finalizes this 2-of-3 agreement.
 ```
@@ -81,8 +82,8 @@ await oblivia.signMultiSig(signer2Secret, contractData);
 | `generateProof(signerSecret, contractData)` | Generate and locally verify a proof binding the key to the full contract hash and a timestamp. |
 | `signContract(signerSecret, contractData)` | Full pipeline: key → proof → register → verify and record on-chain. |
 | `createMultiSigContract(contractData, threshold, maxSigners)` | Returns the contract hash, settings, multisig address and transaction; transaction is `null` if the matching configuration already exists. |
-| `signMultiSig(signerSecret, contractData)` | Returns commitments, contract hash and a confirmed transaction. It does not fetch or return a `state` object. |
-| `finalizeMultiSigContract(contractData)` | Normally unnecessary because signing auto-finalizes. Returns a `null` transaction if already finalized; fails below threshold. |
+| `signMultiSig(signerSecret, contractData, threshold, maxSigners)` | Returns commitments, contract hash and a confirmed transaction. It does not fetch or return a `state` object. |
+| `finalizeMultiSigContract(contractData, threshold, maxSigners)` | Normally unnecessary because signing auto-finalizes. Returns a `null` transaction if already finalized; fails below threshold. |
 | `initializeRegistry()` | One-time registry initialization (already done on Devnet). |
 
 Browser entry point (`@oblivia/sdk/browser`): `createSignerPasskey`, `getPasskeySecret`, `deriveSignerKey`, `generateProof`, `PasskeyUnavailableError`. It takes explicit proving-asset URLs and does not expose the Node submission methods.

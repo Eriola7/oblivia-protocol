@@ -19,7 +19,12 @@ pub struct RecordVerifiedMultiSig<'info> {
     pub registry: Account<'info, ContractRegistry>,
     #[account(mut, seeds = [CONTRACT_SEED, &contract_hash], bump = contract.bump)]
     pub contract: Account<'info, Contract>,
-    #[account(mut, seeds = [MULTISIG_SEED, &contract_hash], bump = multisig.bump, has_one = contract)]
+    #[account(
+        mut,
+        seeds = [MULTISIG_SEED, &contract_hash, &[multisig.threshold], &[multisig.max_signers]],
+        bump = multisig.bump,
+        has_one = contract
+    )]
     pub multisig: Account<'info, MultiSigContract>,
     #[account(
         seeds = [SIGNER_RECORD_SEED, &contract_hash, &key_commitment],

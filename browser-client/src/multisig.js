@@ -19,6 +19,8 @@ let signerUnlocked = false;
 let signerSecret = null;
 let currentContract = null;
 let currentHash = null;
+// The agreement's settings are part of its on-chain address.
+let currentConfig = null;
 let creatingInProgress = false;
 let signingInProgress = false;
 let statusRevision = 0;
@@ -106,6 +108,15 @@ window.addEventListener('DOMContentLoaded', () => {
     // URLSearchParams has already decoded the value; preserve literal % text.
     currentContract = c;
     currentHash = hashContract(currentContract);
+    const threshold = Number(params.get('t'));
+    const maxSigners = Number(params.get('n'));
+    try {
+      if (!/^\d+$/.test(params.get('t') || '') || !/^\d+$/.test(params.get('n') || '')) throw new Error('missing settings');
+      validateMultisigConfig(threshold, maxSigners);
+      currentConfig = { threshold, maxSigners };
+    } catch (_) {
+      currentConfig = null;
+    }
     showSignMode();
   } else {
     showCreateMode();
@@ -121,13 +132,22 @@ async function showSignMode() {
   document.getElementById('createMode').style.display = 'none';
   document.getElementById('signMode').style.display = 'block';
   document.getElementById('contractDisplay').textContent = currentContract;
+  if (!currentConfig) {
+    document.getElementById('progress').textContent = 'This link is missing the agreement settings. Ask the creator for a new link.';
+    document.getElementById('scanBtn').disabled = true;
+    const createBtn = document.getElementById('createPasskeyBtn');
+    if (createBtn) createBtn.disabled = true;
+    return;
+  }
   await refreshStatus();
 }
 
 async function refreshStatus() {
   const revision = ++statusRevision;
   try {
-    const res = await fetch(RELAY_URL + '/multisig/status/' + encodeURIComponent(JSON.stringify(currentHash)));
+    if (!currentConfig) throw new Error('Agreement settings are unknown');
+    const res = await fetch(RELAY_URL + '/multisig/status/' + encodeURIComponent(JSON.stringify(currentHash)) +
+      '?threshold=' + currentConfig.threshold + '&maxSigners=' + currentConfig.maxSigners);
     const s = await relayResponse(res);
     if (revision !== statusRevision) return;
     if (s.exists === false) throw new Error('Multisig not found');
@@ -167,7 +187,8 @@ window.createMultisig = async function () {
     }
     if (data.alreadyExists !== true) validateTransaction(data.transaction);
     log(data.alreadyExists === true ? 'Matching multisig already exists on-chain' : 'Multisig created on-chain', 'success');
-    const link = window.location.origin + window.location.pathname + '?c=' + encodeURIComponent(contract);
+    const link = window.location.origin + window.location.pathname + '?c=' + encodeURIComponent(contract) +
+      '&t=' + threshold + '&n=' + maxSigners;
     document.getElementById('shareLink').value = link;
     document.getElementById('shareBox').style.display = 'block';
   } catch (e) { log('Creation unconfirmed: ' + e.message); }
@@ -229,6 +250,7 @@ window.createPasskeyAndSign = function () { return unlockSigner(true); };
 async function doSign() {
   if (signingInProgress || finalizedStatus) return;
   if (!signerUnlocked) { log('Unlock your passkey first'); return; }
+  if (!currentConfig) { log('This link is missing the agreement settings. Ask the creator for a new link.'); return; }
   const scanBtn = document.getElementById('scanBtn');
   if (scanBtn) scanBtn.disabled = true;
   signingInProgress = true;
@@ -255,7 +277,7 @@ async function doSign() {
     log('Submitting to Solana... (sponsored)');
     const res = await fetch(RELAY_URL + '/multisig/sign', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contractHash: currentHash, keyCommitment, signatureCommitment, proofA: payload.proofA, proofB: payload.proofB, proofC: payload.proofC, publicInputs: payload.publicInputs })
+      body: JSON.stringify({ contractHash: currentHash, threshold: currentConfig.threshold, maxSigners: currentConfig.maxSigners, keyCommitment, signatureCommitment, proofA: payload.proofA, proofB: payload.proofB, proofC: payload.proofC, publicInputs: payload.publicInputs })
     });
     const data = await relayResponse(res);
     validateTransaction(data.transaction);

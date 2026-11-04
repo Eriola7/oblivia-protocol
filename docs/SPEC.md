@@ -24,7 +24,7 @@ The on-chain verifier accepts only a valid proof for these four values. It then 
 
 ## Multisig flow
 
-1. Create an M-of-N agreement for a registered contract.
+1. Create an M-of-N agreement for a registered contract. Its address is derived from the contract hash, M and N, so the settings cannot be pre-empted or changed.
 2. Generate and verify each co-signer's v2 proof in the same transaction as `record_verified_multisig`.
 3. The member PDA prevents duplicate key commitments. The agreement finalizes when its threshold is reached.
 

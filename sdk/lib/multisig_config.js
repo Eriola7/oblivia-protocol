@@ -13,4 +13,16 @@ function assertMultisigConfig(existing, threshold, maxSigners) {
     }
 }
 
-module.exports = { validateMultisigConfig, assertMultisigConfig };
+/**
+ * Seeds for an agreement's on-chain address. The settings are part of the
+ * address, so a contract's agreement with other settings is a separate
+ * account and cannot be claimed first by someone else.
+ */
+function multisigSeeds(contractHash, threshold, maxSigners) {
+    validateMultisigConfig(threshold, maxSigners);
+    const hash = Buffer.from(contractHash);
+    if (hash.length !== 32) throw new Error('contractHash must be 32 bytes');
+    return [Buffer.from('oblivia_multisig'), hash, Buffer.from([threshold]), Buffer.from([maxSigners])];
+}
+
+module.exports = { validateMultisigConfig, assertMultisigConfig, multisigSeeds };

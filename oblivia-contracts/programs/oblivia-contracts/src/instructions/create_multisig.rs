@@ -9,8 +9,8 @@ pub fn create_multisig_handler(
     threshold: u8,
     max_signers: u8,
 ) -> Result<()> {
-    require!(threshold > 0, ObliviaError::InvalidContractHash);
-    require!(max_signers >= threshold, ObliviaError::InvalidContractHash);
+    require!(threshold > 0, ObliviaError::InvalidMultisigConfig);
+    require!(max_signers >= threshold, ObliviaError::InvalidMultisigConfig);
     require!(ctx.accounts.contract.active, ObliviaError::ContractInactive);
 
     let multisig = &mut ctx.accounts.multisig;
@@ -38,7 +38,10 @@ pub struct CreateMultiSig<'info> {
         init,
         payer = payer,
         space = MultiSigContract::LEN,
-        seeds = [MULTISIG_SEED, &contract_hash],
+        // The settings are part of the address: an agreement with other
+        // settings is a different account, so nobody can claim a contract's
+        // multisig first with a threshold the creator did not choose.
+        seeds = [MULTISIG_SEED, &contract_hash, &[threshold], &[max_signers]],
         bump
     )]
     pub multisig: Account<'info, MultiSigContract>,

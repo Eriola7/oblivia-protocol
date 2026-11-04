@@ -4,7 +4,7 @@ const path = require('path');
 const cors = require('cors');
 const { Connection, Keypair, PublicKey } = require('@solana/web3.js');
 const anchor = require('@coral-xyz/anchor');
-const { validateMultisigConfig, assertMultisigConfig } = require('../sdk/lib/multisig_config');
+const { validateMultisigConfig, assertMultisigConfig, multisigSeeds } = require('../sdk/lib/multisig_config');
 const { createAccountReaders, initializeOrReadExisting } = require('../sdk/lib/account_state');
 const { readContractAccount, readMultisigAccount } = createAccountReaders(anchor);
 
@@ -92,6 +92,18 @@ function parseByteArray(value, length, name) {
     return value;
 }
 
+// Status lookups pass settings in the query string; they are part of the agreement address.
+function parseStatusConfig(query) {
+    const isDecimal = value => typeof value === 'string' && /^\d{1,3}$/.test(value);
+    if (!query || !isDecimal(query.threshold) || !isDecimal(query.maxSigners)) {
+        throw new RelayError(400, 'threshold and maxSigners query parameters are required');
+    }
+    const threshold = Number(query.threshold);
+    const maxSigners = Number(query.maxSigners);
+    validateRequestConfig(threshold, maxSigners);
+    return { threshold, maxSigners };
+}
+
 function parseStatusHash(value) {
     let parsed;
     try { parsed = JSON.parse(value); }
@@ -103,7 +115,6 @@ const PROGRAM_ID = new PublicKey('HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG')
 const REGISTRY_SEED = Buffer.from('oblivia_registry');
 const CONTRACT_SEED = Buffer.from('oblivia_contract');
 const SIGNATURE_SEED = Buffer.from('oblivia_signature');
-const MULTISIG_SEED = Buffer.from('oblivia_multisig');
 const MULTISIG_MEMBER_SEED = Buffer.from('oblivia_multisig_member');
 
 // Testnet — sponsored by faucet-funded fee payer
@@ -229,7 +240,7 @@ app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
 
         const [registryPda] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
         const [contractPda] = PublicKey.findProgramAddressSync([CONTRACT_SEED, contractHashBytes], PROGRAM_ID);
-        const [multisigPda] = PublicKey.findProgramAddressSync([MULTISIG_SEED, contractHashBytes], PROGRAM_ID);
+        const [multisigPda] = PublicKey.findProgramAddressSync(multisigSeeds(contractHashBytes, threshold, maxSigners), PROGRAM_ID);
 
         const contractInfo = await upstreamRequest(() => connection.getAccountInfo(contractPda));
         const contract = decodeAccount(() => readContractAccount(contractInfo, contractHashBytes));
@@ -270,7 +281,8 @@ app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
 
 app.post('/multisig/sign', limitSponsoredRequest, async (req, res) => {
     try {
-        const { contractHash, keyCommitment, signatureCommitment, proofA, proofB, proofC, publicInputs } = validateRequestBody(req.body);
+        const { contractHash, threshold, maxSigners, keyCommitment, signatureCommitment, proofA, proofB, proofC, publicInputs } = validateRequestBody(req.body);
+        validateRequestConfig(threshold, maxSigners);
         const contractHashBytes = parseBytes32(contractHash, 'contractHash');
         const keyCommitmentBytes = parseHex32(keyCommitment, 'keyCommitment');
         const sigCommitmentBytes = parseHex32(signatureCommitment, 'signatureCommitment');
@@ -285,7 +297,7 @@ app.post('/multisig/sign', limitSponsoredRequest, async (req, res) => {
         const [registryPda] = PublicKey.findProgramAddressSync([REGISTRY_SEED], PROGRAM_ID);
         const [contractPda] = PublicKey.findProgramAddressSync([CONTRACT_SEED, contractHashBytes], PROGRAM_ID);
         const [signaturePda] = PublicKey.findProgramAddressSync([SIGNATURE_SEED, contractPda.toBuffer(), keyCommitmentBytes, sigCommitmentBytes], PROGRAM_ID);
-        const [multisigPda] = PublicKey.findProgramAddressSync([MULTISIG_SEED, contractHashBytes], PROGRAM_ID);
+        const [multisigPda] = PublicKey.findProgramAddressSync(multisigSeeds(contractHashBytes, threshold, maxSigners), PROGRAM_ID);
         const [memberPda] = PublicKey.findProgramAddressSync([MULTISIG_MEMBER_SEED, multisigPda.toBuffer(), keyCommitmentBytes], PROGRAM_ID);
 
         const verify = await program.methods.verifyGroth16V2(
@@ -311,8 +323,9 @@ app.post('/multisig/sign', limitSponsoredRequest, async (req, res) => {
 app.get('/multisig/status/:hash', async (req, res) => {
     try {
         const contractHashBytes = parseStatusHash(req.params.hash);
+        const { threshold, maxSigners } = parseStatusConfig(req.query);
         const [contractPda] = PublicKey.findProgramAddressSync([CONTRACT_SEED, contractHashBytes], PROGRAM_ID);
-        const [multisigPda] = PublicKey.findProgramAddressSync([MULTISIG_SEED, contractHashBytes], PROGRAM_ID);
+        const [multisigPda] = PublicKey.findProgramAddressSync(multisigSeeds(contractHashBytes, threshold, maxSigners), PROGRAM_ID);
         // A public read does not need the sponsor's private key. Decode the
         // exact account ourselves to distinguish absence from RPC/binding errors.
         const info = await upstreamRequest(() => connection.getAccountInfo(multisigPda));

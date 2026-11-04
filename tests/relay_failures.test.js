@@ -13,7 +13,7 @@ const transaction = '2'.repeat(88);
 
 function payload() {
     return {
-        contractHash: Array(32).fill(1), keyCommitment: '02'.repeat(32), signatureCommitment: '03'.repeat(32),
+        contractHash: Array(32).fill(1), threshold: 2, maxSigners: 3, keyCommitment: '02'.repeat(32), signatureCommitment: '03'.repeat(32),
         proofA: Array(64).fill(0), proofB: Array(128).fill(0), proofC: Array(64).fill(0), publicInputs: Array(128).fill(0),
     };
 }

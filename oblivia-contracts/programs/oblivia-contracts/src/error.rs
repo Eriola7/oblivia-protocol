@@ -18,4 +18,6 @@ pub enum ObliviaError {
     InvalidProof,
     #[msg("Signature submission is disabled until a contract-bound proof verifier is configured")]
     ProofBindingUnavailable,
+    #[msg("Multisig requires 1 <= threshold <= max_signers")]
+    InvalidMultisigConfig,
 }

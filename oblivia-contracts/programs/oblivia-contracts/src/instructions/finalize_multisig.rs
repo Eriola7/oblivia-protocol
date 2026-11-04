@@ -38,7 +38,7 @@ pub struct FinalizeMultiSig<'info> {
     pub contract: Account<'info, Contract>,
     #[account(
         mut,
-        seeds = [MULTISIG_SEED, &_contract_hash],
+        seeds = [MULTISIG_SEED, &_contract_hash, &[multisig.threshold], &[multisig.max_signers]],
         bump = multisig.bump
     )]
     pub multisig: Account<'info, MultiSigContract>,

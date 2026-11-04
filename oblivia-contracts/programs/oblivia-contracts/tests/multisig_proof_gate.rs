@@ -35,7 +35,8 @@ impl Fixture {
         svm.airdrop(&payer.pubkey(), 1_000_000_000).unwrap();
         let (registry, rb) = Pubkey::find_program_address(&[REGISTRY_SEED], &ID);
         let (contract, cb) = Pubkey::find_program_address(&[CONTRACT_SEED, &hash], &ID);
-        let (multisig, mb) = Pubkey::find_program_address(&[MULTISIG_SEED, &hash], &ID);
+        // A 2-of-3 agreement: the settings are part of its address.
+        let (multisig, mb) = Pubkey::find_program_address(&[MULTISIG_SEED, &hash, &[2], &[3]], &ID);
         let mut f = Self {
             svm,
             payer,
@@ -331,6 +332,23 @@ fn forged_or_mismatched_signatures_cannot_count() {
         assert!(err.contains(expected), "case {case}: {err}");
         f.assert_no_count(key);
     }
+}
+
+#[test]
+fn agreement_at_an_address_for_other_settings_cannot_be_counted() {
+    // Someone else's agreement account for the same contract but stored at
+    // the address of different settings must not be accepted as this one.
+    let mut f = Fixture::new();
+    let key = [7; 32];
+    let (record, signature) = f.seed_verified_pair(key);
+    let multisig = f.svm.get_account(&f.multisig).unwrap();
+    let mut state = MultiSigContract::try_deserialize(&mut multisig.data.as_slice()).unwrap();
+    state.threshold = 1;
+    let address = f.multisig;
+    f.put(address, &state, ID);
+    let err = f.count(key, record, signature).unwrap_err();
+    assert!(err.contains("ConstraintSeeds"), "{err}");
+    assert!(f.svm.get_account(&f.member_address(key)).is_none());
 }
 
 #[test]

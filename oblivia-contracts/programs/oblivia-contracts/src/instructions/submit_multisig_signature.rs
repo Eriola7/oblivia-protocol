@@ -29,7 +29,11 @@ pub struct SubmitMultiSigSignature<'info> {
         seeds = [SIGNATURE_SEED, contract.key().as_ref(), &key_commitment, &signature_commitment], bump
     )]
     pub signature: Account<'info, ObliviaSignature>,
-    #[account(mut, seeds = [MULTISIG_SEED, &contract.contract_hash], bump = multisig.bump)]
+    #[account(
+        mut,
+        seeds = [MULTISIG_SEED, &contract.contract_hash, &[multisig.threshold], &[multisig.max_signers]],
+        bump = multisig.bump
+    )]
     pub multisig: Account<'info, MultiSigContract>,
     /// Deduplication PDA — init fails if same signer submits twice
     #[account(

@@ -20,6 +20,7 @@ First npm release. Targets the Devnet v2 program `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd
 - **Breaking:** `generateProof`, `signContract` and `signMultiSig` take a `signerSecret: Uint8Array`
   (at least 32 bytes from a passkey, wallet or device seed) instead of biometric measurements.
 - The signer key is a 248-bit domain-separated SHA-256 of the contract hash and signer secret (`oblivia/signer-key/v2`). Keys are per contract, so signatures cannot be linked across contracts.
+- **Breaking:** `signMultiSig` and `finalizeMultiSigContract` take the agreement's `threshold` and `maxSigners`, which are part of its on-chain address.
 - The SDK no longer loads `.env` files into the host process. Set `OBLIVIA_DEVNET_KEY` yourself;
   a missing or malformed key now fails with a clear error.
 
@@ -27,6 +28,7 @@ First npm release. Targets the Devnet v2 program `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd
 
 - Biometric key derivation (`deriveKey`, the prototype fuzzy extractor and feature validation).
 - The unused Noir circuit artifact.
+- Dead helpers for disabled or legacy instructions (`submitSignature`, `submitMultisigSignature`, `verifySignature`).
 
 ### Security
 

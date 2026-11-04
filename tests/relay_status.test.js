@@ -10,7 +10,7 @@ const { programId, contractHash, prefundedAccount, multisigAccount } = require('
 const filename = path.join(__dirname, '../relay/server.js');
 const nativeRequire = createRequire(filename);
 const validHash = JSON.stringify(Array.from(contractHash));
-const [expectedMultisig] = PublicKey.findProgramAddressSync([Buffer.from('oblivia_multisig'), contractHash], programId);
+const [expectedMultisig] = PublicKey.findProgramAddressSync([Buffer.from('oblivia_multisig'), contractHash, Buffer.from([2]), Buffer.from([3])], programId);
 
 // Execute the actual registered route with real account decoding, but no server,
 // environment-file loading, sponsor, wallet, transaction, or network access.
@@ -46,8 +46,8 @@ function relayStatus(accountLookup = async () => null) {
     }
     return {
         calls,
-        get(hash = validHash) {
-            return capture(res => routes.get('/multisig/status/:hash')({ params: { hash } }, res));
+        get(hash = validHash, query = { threshold: '2', maxSigners: '3' }) {
+            return capture(res => routes.get('/multisig/status/:hash')({ params: { hash }, query }, res));
         },
         parsingError(error) {
             const handler = middleware.find(fn => fn.length === 4);
@@ -135,4 +135,23 @@ test('body-parser failures use JSON error responses without echoing request bodi
         assert.doesNotMatch(response.body.error, new RegExp(marker));
         assert.deepEqual(r.calls, []);
     }
+});
+
+test('multisig status requires valid agreement settings before any RPC work', async () => {
+    const relay = relayStatus(async () => assert.fail('no lookup for invalid settings'));
+    for (const query of [{}, { threshold: '2' }, { maxSigners: '3' }, { threshold: '0', maxSigners: '3' },
+        { threshold: '4', maxSigners: '3' }, { threshold: '2.5', maxSigners: '3' }, { threshold: '2', maxSigners: '256' },
+        { threshold: '1e1', maxSigners: '10' }, { threshold: ['2'], maxSigners: '3' }]) {
+        const response = await relay.get(validHash, query);
+        assert.equal(response.status, 400, JSON.stringify(query));
+    }
+    assert.deepEqual(relay.calls, []);
+});
+
+test('multisig status looks up the address derived from the requested settings', async () => {
+    const relay = relayStatus(async () => null);
+    await relay.get(validHash, { threshold: '1', maxSigners: '5' });
+    const [other] = PublicKey.findProgramAddressSync([Buffer.from('oblivia_multisig'), contractHash, Buffer.from([1]), Buffer.from([5])], programId);
+    assert.deepEqual(relay.calls, [other.toBase58()]);
+    assert.notEqual(other.toBase58(), expectedMultisig.toBase58());
 });

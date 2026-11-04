@@ -102,16 +102,20 @@ async function createMultiSigContract(contractData, threshold, maxSigners) {
 }
 
 /**
- * Sign a multi-sig contract as one of N signers
- * 
+ * Sign a multi-sig contract as one of N signers.
+ * The settings identify the agreement: they are part of its on-chain address.
+ *
  * @param {Uint8Array} signerSecret - at least 32 bytes from a passkey, wallet or device seed
  * @param {string|Uint8Array} contractData - The contract content to sign
+ * @param {number} threshold - The agreement's signature threshold
+ * @param {number} maxSigners - The agreement's maximum number of signers
  */
-async function signMultiSig(signerSecret, contractData) {
+async function signMultiSig(signerSecret, contractData, threshold, maxSigners) {
+    validateMultisigConfig(threshold, maxSigners);
     const proof = await generateProof(signerSecret, contractData);
     const { keyCommitment, signatureCommitment, contractHash } = proof;
 
-    const transaction = await submitVerifiedMultiSig(contractHash, proof);
+    const transaction = await submitVerifiedMultiSig(contractHash, threshold, maxSigners, proof);
 
     return {
         verified: true,
@@ -128,10 +132,13 @@ async function signMultiSig(signerSecret, contractData) {
  * Finalize a multi-sig contract once threshold is reached
  * 
  * @param {string|Uint8Array} contractData - The contract content
+ * @param {number} threshold - The agreement's signature threshold
+ * @param {number} maxSigners - The agreement's maximum number of signers
  */
-async function finalizeMultiSigContract(contractData) {
+async function finalizeMultiSigContract(contractData, threshold, maxSigners) {
+    validateMultisigConfig(threshold, maxSigners);
     const contractHash = hashContract(contractData);
-    const transaction = await finalizeMultisig(contractHash);
+    const transaction = await finalizeMultisig(contractHash, threshold, maxSigners);
     return { finalized: true, identityRevealed: false, transaction };
 }
 

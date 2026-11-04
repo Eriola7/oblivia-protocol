@@ -66,7 +66,7 @@ function browser(overrides = {}) {
             return {};
         },
         window: {
-            location: { origin: 'https://example.test', hostname: overrides.hostname || 'example.test', pathname: '/multisig.html', search: '' },
+            location: { origin: 'https://example.test', hostname: overrides.hostname || 'example.test', pathname: '/multisig.html', search: overrides.search || '' },
             addEventListener: (_, handler) => { loaded = handler; },
         },
         document: { getElementById: get, createElement: () => element() },
@@ -83,7 +83,7 @@ function browser(overrides = {}) {
     get('threshold').value = '2';
     get('maxSigners').value = '3';
     get('shareBox').style.display = 'none';
-    vm.runInContext('signerUnlocked = true; signerSecret = new Uint8Array(32).fill(5); currentHash = Array(32).fill(1);', context);
+    vm.runInContext('signerUnlocked = true; signerSecret = new Uint8Array(32).fill(5); currentHash = Array(32).fill(1); currentConfig = { threshold: 2, maxSigners: 3 };', context);
     return {
         context, calls, get,
         sign: () => vm.runInContext('doSign()', context),
@@ -412,6 +412,36 @@ test('malformed multisig signer secrets cannot reach proof generation or submiss
         assert.equal(b.calls.requests.length, 0);
         assert.equal(b.get('scanBtn').disabled, false);
         assert.match(b.logs(), /signerSecret/);
+    }
+});
+
+test('agreement settings travel in the share link, status lookups and signatures', async () => {
+    const creator = browser();
+    await creator.context.window.createMultisig();
+    const link = new URL(creator.get('shareLink').value);
+    assert.equal(link.searchParams.get('t'), '2');
+    assert.equal(link.searchParams.get('n'), '3');
+
+    const signer = browser({ search: link.search });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual({ ...vm.runInContext('currentConfig', signer.context) }, { threshold: 2, maxSigners: 3 });
+    const status = signer.calls.requests.find(call => call.url.includes('/multisig/status/'));
+    assert.match(status.url, /\?threshold=2&maxSigners=3$/);
+    await signer.sign();
+    const body = JSON.parse(signer.calls.requests.find(call => call.url.endsWith('/multisig/sign')).options.body);
+    assert.equal(body.threshold, 2);
+    assert.equal(body.maxSigners, 3);
+});
+
+test('a share link without valid settings cannot look up or sign an agreement', async () => {
+    for (const search of ['?c=Agreement', '?c=Agreement&t=2', '?c=Agreement&t=0&n=3', '?c=Agreement&t=2.5&n=3', '?c=Agreement&t=4&n=3']) {
+        const b = browser({ search });
+        await new Promise(resolve => setImmediate(resolve));
+        vm.runInContext('signerUnlocked = true; signerSecret = new Uint8Array(32).fill(5); currentConfig = null;', b.context);
+        await b.sign();
+        assert.equal(b.calls.requests.length, 0, search);
+        assert.equal(b.calls.proofs.length, 0, search);
+        assert.match(b.get('progress').textContent + b.logs(), /missing the agreement settings/, search);
     }
 });
 

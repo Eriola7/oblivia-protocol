@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 const { validateMultisigConfig, assertMultisigConfig } = require('../sdk/lib/multisig_config');
-const { contractPda, contractAccount, multisigAccount } = require('./helpers/account_fixtures');
+const { contractPda, multisigPda, contractAccount, multisigAccount } = require('./helpers/account_fixtures');
 const root = path.join(__dirname, '..');
 
 test('multisig configuration rejects invalid and conflicting settings', () => {
@@ -54,10 +54,10 @@ for (const file of ['sdk/lib/anchor_integration.js']) {
         const context = vm.createContext({ require: name => name === 'dotenv' ? { config() {} } : nativeRequire(name), module: { exports: {} }, __dirname: path.dirname(filename), Buffer, process: { env: {} }, console: { log() {} }, payer, program });
         vm.runInContext(fs.readFileSync(filename, 'utf8'), context);
         vm.runInContext('getKeypair = () => payer; getProvider = () => ({}); getProgram = async () => program;', context);
-        assert.equal(await context.module.exports.finalizeMultisig(Array(32).fill(1)), null);
+        assert.equal(await context.module.exports.finalizeMultisig(Array(32).fill(1), 2, 3), null);
         assert.equal(sent, 0);
         finalized = false;
-        assert.equal(await context.module.exports.finalizeMultisig(Array(32).fill(1)), 'finalize-transaction');
+        assert.equal(await context.module.exports.finalizeMultisig(Array(32).fill(1), 2, 3), 'finalize-transaction');
         assert.equal(sent, 1);
     });
 
@@ -76,7 +76,7 @@ for (const file of ['sdk/lib/anchor_integration.js']) {
         await assert.rejects(context.module.exports.createMultisig(Array(32).fill(1), 2, 3), /different multisig settings/);
         existing = await multisigAccount();
         assert.equal((await context.module.exports.createMultisig(Array(32).fill(1), 2, 3)).tx, null);
-        await context.module.exports.submitVerifiedMultiSig(Array(32).fill(1), { keyCommitment: Array(32).fill(2), signatureCommitment: Array(32).fill(3), proofA: [], proofB: [], proofC: [], publicInputs: [] });
+        await context.module.exports.submitVerifiedMultiSig(Array(32).fill(1), 2, 3, { keyCommitment: Array(32).fill(2), signatureCommitment: Array(32).fill(3), proofA: [], proofB: [], proofC: [], publicInputs: [] });
         assert.equal(calls.length, 2);
         assert.equal(calls[0].name, 'verify');
         assert.equal(calls[1].name, 'record');
@@ -150,12 +150,19 @@ test('relay refuses conflicting settings and passes the proof record to counting
     assert.equal(status, 400);
     assert.match(response.error, /integer values/);
     status = 200;
-    await routes.get('/multisig/sign')({ body: { contractHash, keyCommitment: '02'.repeat(32), signatureCommitment: '03'.repeat(32), proofA: Array(64).fill(0), proofB: Array(128).fill(0), proofC: Array(64).fill(0), publicInputs: Array(128).fill(0) } }, res);
+    const signBody = { contractHash, keyCommitment: '02'.repeat(32), signatureCommitment: '03'.repeat(32), proofA: Array(64).fill(0), proofB: Array(128).fill(0), proofC: Array(64).fill(0), publicInputs: Array(128).fill(0) };
+    await routes.get('/multisig/sign')({ body: signBody }, res);
+    assert.equal(status, 400, 'signing requires the agreement settings');
+    assert.match(response.error, /integer values/);
+    assert.equal(calls.length, 0);
+    status = 200;
+    await routes.get('/multisig/sign')({ body: { threshold: 2, maxSigners: 3, contractHash, keyCommitment: '02'.repeat(32), signatureCommitment: '03'.repeat(32), proofA: Array(64).fill(0), proofB: Array(128).fill(0), proofC: Array(64).fill(0), publicInputs: Array(128).fill(0) } }, res);
     assert.equal(status, 200);
     assert.equal(response.error, undefined);
     assert.equal(calls.length, 2);
     assert.equal(calls[0].accounts.signerRecord.toBase58(), calls[1].accounts.signerRecord.toBase58());
     assert.equal(calls[0].accounts.signature.toBase58(), calls[1].accounts.signature.toBase58());
+    assert.equal(calls[1].accounts.multisig.toBase58(), multisigPda.toBase58(), 'counts against the 2-of-3 agreement address');
 });
 
 test('browser prevents overlapping passkey unlocks and allows retry after an unlock failure', async () => {

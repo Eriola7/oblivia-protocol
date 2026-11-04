@@ -20,13 +20,15 @@ async function checkApi(features: number[], text: string, bytes: Uint8Array) {
     const agreement = await createMultiSigContract(bytes, 2, 3);
     const address: string = agreement.multisigAddress;
     const creation: string | null = agreement.transaction;
-    const member = await signMultiSig(secret, bytes);
+    const member = await signMultiSig(secret, bytes, 2, 3);
+    // @ts-expect-error The agreement settings are required: they identify the agreement.
+    signMultiSig(secret, bytes);
     const verified: true = member.verified;
     // @ts-expect-error Signing returns a receipt, not a separate status lookup.
     member.state.finalized;
     // @ts-expect-error The biometric-derivation API was removed.
-    signMultiSig(features, bytes);
-    const finalization = await finalizeMultiSigContract(text);
+    signMultiSig(features, bytes, 2, 3);
+    const finalization = await finalizeMultiSigContract(text, 2, 3);
     const finalTx: string | null = finalization.transaction;
     const registry: PublicKey = await initializeRegistry();
     return { key, publicInputs, signature, commitment, address, creation, verified, finalTx, registry };

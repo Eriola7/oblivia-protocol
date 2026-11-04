@@ -12,7 +12,7 @@ Oblivia has not been audited. This is the scope we will put to an external revie
 **Solana program** (`oblivia-contracts/`)
 - `verify_groth16_v2`: proof deserialization, public-input ordering, contract-hash limb comparison, atomic PDA creation.
 - `record_verified_multisig`: signer-record and signature-receipt provenance, duplicate counting, threshold finalization.
-- `create_multisig`: first-writer-wins agreement settings and front-running exposure.
+- `create_multisig`: agreement settings are part of the PDA seeds; confirm no settings can be claimed or changed by a third party.
 - Remaining fail-closed legacy instructions (`submit_signature`, `submit_multisig_signature`) and whether to remove them. The v1 `verify_groth16` has been removed from source.
 - Coverage of `tests/proof_verification.rs`: malformed encodings, off-curve and identity points, non-canonical inputs, and well-formed forgeries.
 - Account sizing, PDA seeds, overflow behaviour.

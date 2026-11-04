@@ -42,6 +42,7 @@ function fakeProof() {
 }
 
 for (const method of ['signContract', 'signMultiSig']) {
+    const settings = method === 'signMultiSig' ? [2, 3] : [];
     test(`public SDK ${method} submits the complete flat proof result`, async () => {
         const proof = fakeProof();
         const calls = [];
@@ -67,10 +68,13 @@ for (const method of ['signContract', 'signMultiSig']) {
                     calls.push('register');
                 },
                 submitVerifiedGroth16: submit,
-                submitVerifiedMultiSig: submit,
+                submitVerifiedMultiSig: (hash, threshold, maxSigners, submitted) => {
+                    assert.deepEqual([threshold, maxSigners], [2, 3], 'settings identify the agreement');
+                    return submit(hash, submitted);
+                },
             },
         });
-        const result = await sdk[method](secret, contract);
+        const result = await sdk[method](secret, contract, ...settings);
         assert.deepEqual(calls, method === 'signContract' ? ['prove', 'register', 'submit'] : ['prove', 'submit']);
         assert.strictEqual(result.keyCommitment, proof.keyCommitment);
         assert.strictEqual(result.signatureCommitment, proof.signatureCommitment);
@@ -100,10 +104,10 @@ for (const method of ['signContract', 'signMultiSig']) {
                 submitVerifiedMultiSig: submit,
             },
         });
-        await assert.rejects(sdk[method](secret, contract), /proving unavailable/);
+        await assert.rejects(sdk[method](secret, contract, ...settings), /proving unavailable/);
         assert.deepEqual(calls, [], 'a failed proof must not register or submit anything');
         failProving = false;
-        await assert.rejects(sdk[method](secret, contract), /submission rejected/);
+        await assert.rejects(sdk[method](secret, contract, ...settings), /submission rejected/);
         assert.deepEqual(calls, method === 'signContract' ? ['register', 'submit'] : ['submit']);
     });
 }
@@ -149,7 +153,7 @@ test('weak or malformed signer secrets are rejected before proving or submission
     for (const bad of [undefined, null, 'a'.repeat(64), Array(32).fill(1), new Uint8Array(31).fill(1),
         new Uint8Array(32), new Uint16Array(32).fill(1), new DataView(new ArrayBuffer(32))]) {
         await assert.rejects(sdk.signContract(bad, contract), /signerSecret/);
-        await assert.rejects(sdk.signMultiSig(bad, contract), /signerSecret/);
+        await assert.rejects(sdk.signMultiSig(bad, contract, 2, 3), /signerSecret/);
     }
     assert.deepEqual(calls, []);
 });
@@ -206,15 +210,29 @@ test('SDK creation preserves the address, receipt, settings and exact string or 
     }
 });
 
+test('signing a multisig requires its settings before any proving', async () => {
+    const calls = [];
+    const sdk = loadModule('sdk/index.js', {
+        './lib/groth16_intent': { generateIntentProof: async () => { calls.push('prove'); } },
+        './lib/anchor_integration': { submitVerifiedMultiSig: async () => calls.push('submit') },
+    });
+    for (const settings of [[], [2], [0, 3], [4, 3], [2.5, 3], ['2', '3']]) {
+        await assert.rejects(sdk.signMultiSig(secret, contract, ...settings), /integer values/);
+    }
+    assert.deepEqual(calls, []);
+});
+
 test('SDK finalization preserves both real and already-finalized receipts', async () => {
     for (const tx of [transaction, null]) {
         const sdk = loadModule('sdk/index.js', {
-            './lib/anchor_integration': { finalizeMultisig: async hash => {
+            './lib/anchor_integration': { finalizeMultisig: async (hash, threshold, maxSigners) => {
                 assert.equal(hash.length, 32);
+                assert.deepEqual([threshold, maxSigners], [2, 3]);
                 return tx;
             } },
         });
-        const result = await sdk.finalizeMultiSigContract(new Uint8Array([0, 255]));
+        await assert.rejects(sdk.finalizeMultiSigContract(new Uint8Array([0, 255])), /integer values/);
+        const result = await sdk.finalizeMultiSigContract(new Uint8Array([0, 255]), 2, 3);
         assert.equal(result.finalized, true);
         assert.equal(result.identityRevealed, false);
         assert.equal(result.transaction, tx);

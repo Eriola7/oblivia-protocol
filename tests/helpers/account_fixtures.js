@@ -8,8 +8,9 @@ const contractHash = Buffer.alloc(32, 1);
 const [contractPda, contractBump] = PublicKey.findProgramAddressSync([
     Buffer.from('oblivia_contract'), contractHash,
 ], programId);
-const [, multisigBump] = PublicKey.findProgramAddressSync([
-    Buffer.from('oblivia_multisig'), contractHash,
+// Agreement settings (2 of 3) are part of the multisig address.
+const [multisigPda, multisigBump] = PublicKey.findProgramAddressSync([
+    Buffer.from('oblivia_multisig'), contractHash, Buffer.from([2]), Buffer.from([3]),
 ], programId);
 
 function prefundedAccount() {
@@ -32,4 +33,4 @@ async function multisigAccount(overrides = {}) {
     return { owner: programId, lamports: 1000000, data, executable: false };
 }
 
-module.exports = { programId, contractHash, contractPda, prefundedAccount, contractAccount, multisigAccount };
+module.exports = { programId, contractHash, contractPda, multisigPda, prefundedAccount, contractAccount, multisigAccount };

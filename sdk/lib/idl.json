@@ -54,36 +54,7 @@
         },
         {
           "name": "multisig",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  98,
-                  108,
-                  105,
-                  118,
-                  105,
-                  97,
-                  95,
-                  109,
-                  117,
-                  108,
-                  116,
-                  105,
-                  115,
-                  105,
-                  103
-                ]
-              },
-              {
-                "kind": "arg",
-                "path": "contract_hash"
-              }
-            ]
-          }
+          "writable": true
         },
         {
           "name": "payer",
@@ -162,36 +133,7 @@
         },
         {
           "name": "multisig",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  98,
-                  108,
-                  105,
-                  118,
-                  105,
-                  97,
-                  95,
-                  109,
-                  117,
-                  108,
-                  116,
-                  105,
-                  115,
-                  105,
-                  103
-                ]
-              },
-              {
-                "kind": "arg",
-                "path": "_contract_hash"
-              }
-            ]
-          }
+          "writable": true
         }
       ],
       "args": [
@@ -342,36 +284,7 @@
         },
         {
           "name": "multisig",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  98,
-                  108,
-                  105,
-                  118,
-                  105,
-                  97,
-                  95,
-                  109,
-                  117,
-                  108,
-                  116,
-                  105,
-                  115,
-                  105,
-                  103
-                ]
-              },
-              {
-                "kind": "arg",
-                "path": "contract_hash"
-              }
-            ]
-          }
+          "writable": true
         },
         {
           "name": "signer_record",
@@ -1187,6 +1100,11 @@
       "code": 6007,
       "name": "ProofBindingUnavailable",
       "msg": "Signature submission is disabled until a contract-bound proof verifier is configured"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidMultisigConfig",
+      "msg": "Multisig requires 1 <= threshold <= max_signers"
     }
   ],
   "types": [

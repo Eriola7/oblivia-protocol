@@ -31,7 +31,7 @@ async function main() {
 
   const registry = pda(seed('oblivia_registry'));
   const contract = pda(seed('oblivia_contract'), hash);
-  const multisig = pda(seed('oblivia_multisig'), hash);
+  const multisig = pda(seed('oblivia_multisig'), hash, Buffer.from([2]), Buffer.from([2])); // threshold 2, max signers 2
   const common = { registry, contract, payer: payer.publicKey, systemProgram: SystemProgram.programId };
   const register = await program.methods.registerContract([...hash]).accounts(common).instruction();
   const create = await program.methods.createMultisig([...hash], 2, 2).accounts({ ...common, multisig }).instruction();

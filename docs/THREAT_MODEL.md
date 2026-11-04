@@ -9,6 +9,7 @@ Oblivia is an on-chain ZK verification and contract-binding primitive. It proves
 | A signature binds to one exact contract | The proof's public inputs include both 128-bit limbs of SHA-256(contract). The program compares them with the registered contract before verifying. A proof for one contract cannot be replayed on another. |
 | Only valid proofs are recorded | `verify_groth16_v2` verifies the Groth16 proof on-chain and creates the signature PDA in the same instruction. Nothing is written if verification fails. |
 | Signatures cannot be linked across contracts | Signer keys are derived from the contract hash and the signer secret, so one signer's key commitments on different contracts are unrelated. |
+| Agreement settings cannot be pre-empted | An agreement's threshold and signer count are part of its on-chain address, so a third party cannot create a contract's agreement first with different settings. |
 | One key, one signature per contract | Signer-record and multisig-member PDAs are derived from the key commitment, so the same key cannot sign or be counted twice. |
 | The signer key stays private | Only Poseidon commitments are public. The signer key and signer secret never leave the device. |
 | Past signatures survive key loss | Receipts are immutable on-chain PDAs. Losing a key does not invalidate anything already signed. |
@@ -32,7 +33,7 @@ Oblivia stores no copy and runs no recovery service. If the key store is lost, t
 
 **Human uniqueness.** Multisig deduplicates **key commitments, not people**. One person who controls several passkeys or secrets can produce several valid signers and, for example, satisfy a 3-of-5 threshold alone. Applications that need one-person-one-vote must restrict eligible signers themselves (an allowlist of known key commitments, an organization's membership system, or a proof-of-personhood layer). Proof-of-personhood integration is a future research item, not a current claim.
 
-**Agreement authorization.** Anyone can register a contract hash and create its multisig settings first. Settings are immutable once created. Clients reject conflicting settings, but they cannot stop someone else from creating them first. Use distinct agreement text for distinct agreements.
+**Participant eligibility.** Anyone can create an agreement for a contract and anyone with a key can sign it. Because an agreement's threshold and signer count are part of its address, nobody can pre-empt a creator's settings: different settings always give a different agreement. Who is allowed to sign is up to the application.
 
 **Legal identity and enforceability.** A valid proof shows that a key holder approved the bytes. It does not establish who that person is.
 
