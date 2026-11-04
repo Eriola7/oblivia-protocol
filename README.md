@@ -120,7 +120,20 @@ The patched multisig counter requires a program-owned `SignerRecord` PDA and a v
 
 The proof points are valid curve points, so the first three can only fail at the pairing check and the replay at the contract-hash comparison (`tests/release_check_cases.test.js` checks this offline). The script also checks a count with no verification at all, which shows the counting gate exists but does not test proofs. It then signs both genuine signers, rejects a duplicate count and confirms finalization. Every value in its JSON output is observed, not hard-coded, and it exits non-zero if any check fails.
 
-This is a smoke test of the deployed program, not a security audit. The forged-proof checks were added after the last recorded run ([final threshold transaction](https://explorer.solana.com/tx/2hjZ1JS93XP3DngYWpavasaY2qY1oBsspF7NxKSc9phNX2YZi5RH8N3zHQZ6Z87HvDWhdG3Ba5SV59z37QLm7rkP?cluster=devnet)) and have not yet been run against Devnet. Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
+This is a smoke test of the deployed program, not a security audit.
+
+**Latest run (4 November 2026, all 10 checks passed).**
+
+- The three forged proofs were rejected at the pairing verification (`verify_groth16_v2.rs:51`).
+- The replayed proof was rejected at the contract-hash comparison (`verify_groth16_v2.rs:38`).
+- A count with no verification was rejected for a missing signer record.
+- No state or receipt was left behind by any rejected attempt.
+- A duplicate count was rejected.
+- The agreement finalized at 2 of 2.
+
+Transactions: [setup](https://explorer.solana.com/tx/5dRdk3aegZxXgtUP8so1SdT6ChGUW2CXvCRZNDccEUSPXkGfbLDFdMAp4gxEK6riy1KMngdGUVfm7NBJAsYNWXGw?cluster=devnet), [signer 1](https://explorer.solana.com/tx/5jYxfmrL9B5NM9r2wcLxTKEqfuQVUR1AvuzkeUvM9eDU52W2ncyWcbjQz81PrWiTDCvmZxBoeNqnrMy3S9GHp2aq?cluster=devnet), [signer 2, finalizing](https://explorer.solana.com/tx/5YMKCQyrGHomjbYjnsqBM8vLvPkETHdvydEqGbKuuFtQVdrVhWWbxPUVe9Pn52FUxrp951zmceXdk43SqjnS8Xj7?cluster=devnet); [agreement account](https://explorer.solana.com/address/49mExCm3tXYNgXMJEr6UihXXzoCLgXpRV7ej1wbVVkMx?cluster=devnet).
+
+Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
 
 Agreement settings are first-created and immutable for a contract hash. Relay and SDK creation reject conflicting threshold/maximum settings rather than silently reusing them. This detects conflicts; it does not prevent another party from registering settings first. Use distinct agreement text for distinct agreements. Participant eligibility and stronger agreement authorization remain unresolved design work.
 
