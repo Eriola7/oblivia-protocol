@@ -23,6 +23,29 @@ const csp = [
 ].join('; ');
 const cspMeta = { 'Content-Security-Policy': { 'http-equiv': 'Content-Security-Policy', content: csp } };
 
+// Response headers for static hosts that read a _headers file (Netlify,
+// Cloudflare Pages). frame-ancestors only works as a header, not in <meta>.
+const headersFile = [
+    '/*',
+    `  Content-Security-Policy: ${csp}; frame-ancestors 'none'`,
+    '  X-Content-Type-Options: nosniff',
+    '  Referrer-Policy: no-referrer',
+    '  Permissions-Policy: camera=(), microphone=(), geolocation=()',
+    '  Strict-Transport-Security: max-age=31536000',
+    '',
+].join('\n');
+
+class EmitHeadersFile {
+    apply(compiler) {
+        compiler.hooks.thisCompilation.tap('EmitHeadersFile', compilation => {
+            compilation.hooks.processAssets.tap(
+                { name: 'EmitHeadersFile', stage: webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL },
+                () => compilation.emitAsset('_headers', new webpack.sources.RawSource(headersFile)),
+            );
+        });
+    }
+}
+
 module.exports = {
     entry: {
         main: './src/main.js',
@@ -34,6 +57,7 @@ module.exports = {
         clean: true
     },
     plugins: [
+        new EmitHeadersFile(),
         new HtmlWebpackPlugin({ template: './src/index.html', filename: 'index.html', chunks: ['main'], meta: cspMeta }),
         new HtmlWebpackPlugin({ template: './src/multisig.html', filename: 'multisig.html', chunks: ['multisig'], meta: cspMeta }),
         new webpack.DefinePlugin({

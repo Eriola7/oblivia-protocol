@@ -27,7 +27,7 @@ Use the public Hermez/Polygon Powers of Tau file for 2^12 constraints (`powersOf
 
 ## Phase 2: circuit-specific contributions
 
-All steps use `zk_groth16/ceremony/ceremony.sh`. A full local dry run with test entropy has been executed successfully against the current circuit.
+All steps use `zk_groth16/ceremony/ceremony.sh`. Send each contributor [CEREMONY_CONTRIBUTOR.md](CEREMONY_CONTRIBUTOR.md). A full local dry run with test entropy has been executed successfully against the current circuit.
 
 1. **Freeze the circuit.** Tag the commit that contains the final `oblivia.circom` and `oblivia.r1cs`. Any circuit change after this point restarts the ceremony.
 2. **Announce.** Publish the schedule, the r1cs hash (`ceremony/out/init.sha256`) and the beacon source and round chosen in advance (for example a future drand round number).
@@ -36,7 +36,7 @@ All steps use `zk_groth16/ceremony/ceremony.sh`. A full local dry run with test 
 5. **Verify.** After each contribution anyone can run `./ceremony/ceremony.sh verify`; it lists every contribution hash in order.
 6. **Beacon.** When the announced public randomness is available: `./ceremony/ceremony.sh beacon <hex> 10`.
 7. **Export.** `./ceremony/ceremony.sh export` verifies the final zkey and installs it under the existing file names for the circuit directory, SDK and relay.
-8. **Redeploy.** Rebuild the program (its `build.rs` embeds `zk_groth16/verification_key.json`), run the full test suite, upgrade the Devnet program, then publish a new SDK version. Old proofs stop verifying after the upgrade; signatures already recorded on-chain stay valid.
+8. **Redeploy.** Follow [DEPLOYMENT.md](DEPLOYMENT.md). Rebuild the program (its `build.rs` embeds `zk_groth16/verification_key.json`), run the full test suite, upgrade the Devnet program, then publish a new SDK version. Old proofs stop verifying after the upgrade; signatures already recorded on-chain stay valid.
 
 ## Transparency record
 

@@ -1,0 +1,111 @@
+# Deployment runbook
+
+How to ship a new version of the program, relay and signing app together. The three must move as one: the program defines the account addresses, and the relay and app derive the same addresses.
+
+## Pending release
+
+`main` contains program changes that are **not yet on Devnet**:
+
+- the v1 `verify_groth16` instruction is removed
+- multisig addresses include the agreement's threshold and maximum signers
+
+The circuit and verification key are unchanged. If you run the [trusted setup ceremony](CEREMONY.md) first, ship its key in the same release so you only upgrade once.
+
+Agreements created before this upgrade use the old address format, so the new relay and app cannot find them. Signatures already recorded stay valid on-chain. This is acceptable on Devnet; announce it to anyone testing.
+
+## Before you start
+
+- Solana CLI and Anchor CLI compatible with `anchor-lang` 1.0.x.
+- The program's **upgrade authority** keypair, the wallet in `oblivia-contracts/Anchor.toml` (`~/.config/solana/oblivia-devnet.json`), with enough Devnet SOL for the upgrade.
+- The **permanent production domain** for the signing app. See the README section "Passkey domain".
+- Access to the relay host and the static host for the signing app.
+
+## 1. Check the release
+
+```bash
+git checkout main && git pull
+npm run setup:test
+npm test
+npm --prefix sdk test
+npm run test:program
+```
+
+All must pass. If the ceremony ran, `zk_groth16/verification_key.json` and `sdk/lib/proving/` must contain its output. `./ceremony/ceremony.sh export` puts them there.
+
+## 2. Build the program and run the VM tests
+
+```bash
+cd oblivia-contracts
+anchor build
+cargo test -p oblivia-contracts --test multisig_proof_gate
+```
+
+`anchor build` writes `target/deploy/oblivia_contracts.so` and `target/idl/oblivia_contracts.json`. The VM tests run that binary.
+
+Then compare the generated IDL with the committed one:
+
+```bash
+diff <(jq -S . target/idl/oblivia_contracts.json) <(jq -S . ../sdk/lib/idl.json)
+```
+
+The only acceptable differences are formatting. If anything else differs, copy the generated IDL to `sdk/lib/idl.json`, run `npm test` and commit it before deploying.
+
+## 3. Upgrade the program
+
+The address stays `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`. Only the upgrade authority can do this:
+
+```bash
+solana program deploy target/deploy/oblivia_contracts.so \
+  --program-id HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG \
+  --upgrade-authority ~/.config/solana/oblivia-devnet.json \
+  --url devnet
+solana program show HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG --url devnet
+```
+
+Check that "Last Deployed In Slot" moved forward and that the authority is unchanged.
+
+## 4. Deploy the relay from the same commit
+
+Redeploy `relay/` on its host right after the upgrade. It needs:
+
+- `OBLIVIA_DEVNET_KEY`: the sponsor fee payer, not the upgrade authority.
+- `OBLIVIA_ALLOWED_ORIGINS`: the signing app's production origin, for example `https://sign.example.com`.
+
+## 5. Build and deploy the signing app
+
+```bash
+OBLIVIA_RP_ID=example.com OBLIVIA_RELAY_URL=https://your-relay.example \
+  npm --prefix browser-client run build
+```
+
+Upload `browser-client/dist/`. The build writes a `_headers` file that Netlify and Cloudflare Pages apply automatically. On any other host, set these response headers yourself:
+
+```
+Content-Security-Policy: <the policy from the page's meta tag>; frame-ancestors 'none'
+X-Content-Type-Options: nosniff
+Referrer-Policy: no-referrer
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Strict-Transport-Security: max-age=31536000
+```
+
+Serve it over HTTPS on the permanent domain or one of its subdomains. Never point a production build at a temporary address: every signer created there would be lost when the app moves.
+
+## 6. Verify on Devnet
+
+```bash
+OBLIVIA_E2E_KEYPAIR=$HOME/oblivia-test-payer.json node zk_groth16/e2e_multisig_devnet.js
+```
+
+The output must end with `"allPassed": true`. Record the run in the README's "Devnet smoke test" section.
+
+Then open the signing app on its real domain:
+
+1. Create a passkey.
+2. Sign a short test agreement.
+3. Create and co-sign a 2-of-2 agreement from a share link.
+
+## If something goes wrong
+
+- **The upgrade fails:** nothing changed. Fix the cause and retry.
+- **The relay or app fails after the upgrade:** redeploy them from the same commit as the program. Earlier builds derive the old multisig addresses and cannot work with the upgraded program.
+- **You need to roll back the program:** redeploy the previous release's `.so` with the same command. Only do this together with the previous relay and app.
