@@ -4,8 +4,8 @@
 
 - [README](README.md): overview, status and local setup
 - [SDK guide](sdk/README.md): installing and using `@oblivia/sdk`
-- [Specification](SPEC.md) and [technical specification](TECHNICAL_SPECIFICATION.md)
-- [Architecture](ARCHITECTURE.md) and [threat model](docs/THREAT_MODEL.md)
+- [Specification](docs/SPEC.md) and [technical specification](docs/TECHNICAL_SPECIFICATION.md)
+- [Architecture](docs/ARCHITECTURE.md) and [threat model](docs/THREAT_MODEL.md)
 
 ## Asking a question or reporting a bug
 

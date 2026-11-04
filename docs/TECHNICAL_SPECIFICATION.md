@@ -31,4 +31,4 @@ Each signer submits a unique verified proof. The program records the verified ke
 
 ## Operational limits
 
-Devnet deployment is not a production security statement. Before Mainnet, the project requires a production Groth16 ceremony ([plan](docs/CEREMONY.md)), independent review ([scope](docs/AUDIT_SCOPE.md)), full end-to-end and adversarial testing, robust relay abuse controls, monitoring, and release procedures. See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+Devnet deployment is not a production security statement. Before Mainnet, the project requires a production Groth16 ceremony ([plan](CEREMONY.md)), independent review ([scope](AUDIT_SCOPE.md)), full end-to-end and adversarial testing, robust relay abuse controls, monitoring, and release procedures. See [docs/THREAT_MODEL.md](THREAT_MODEL.md).

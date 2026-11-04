@@ -39,4 +39,4 @@ Key storage, backup and recovery are outside Oblivia. Browser clients obtain the
 
 ## Production boundary
 
-The committed proving key is development-only. A production ceremony ([plan](docs/CEREMONY.md)), independent review of the circuit, program and clients ([scope](docs/AUDIT_SCOPE.md)), and Mainnet operations are required before production use.
+The committed proving key is development-only. A production ceremony ([plan](CEREMONY.md)), independent review of the circuit, program and clients ([scope](AUDIT_SCOPE.md)), and Mainnet operations are required before production use.

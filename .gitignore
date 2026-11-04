@@ -5,6 +5,10 @@ dist/
 .DS_Store
 zk_groth16/*.ptau
 zk_groth16/*.zkey
+# Committed on purpose: current development proving key and its phase-1 file,
+# needed to verify the key and run tests. Replaced by the production ceremony.
+!zk_groth16/oblivia_1.zkey
+!zk_groth16/pot12_final.ptau
 zk_groth16/*.wtns
 zk_groth16/node_modules/
 

@@ -67,7 +67,7 @@ The same Groth16 relation is proven by the client and verified by the on-chain p
 - `sdk/` — `@oblivia/sdk`: Node and browser entry points, passkey helpers, Anchor submission helpers.
 - `browser-client/` — reference single-signature and multisig clients.
 - `relay/` — sponsored Devnet relay.
-- `docs/` — threat model, ceremony plan and audit scope.
+- `docs/` — [specification](docs/SPEC.md), [technical specification](docs/TECHNICAL_SPECIFICATION.md), [architecture](docs/ARCHITECTURE.md), [threat model](docs/THREAT_MODEL.md), [ceremony plan](docs/CEREMONY.md) and [audit scope](docs/AUDIT_SCOPE.md).
 
 Earlier experiments (the Noir circuit, biometric key derivation, the v1 verifier scripts and the draft document schema) live on the `archive/legacy-experiments` branch. None of them are used by the deployed program, relay, clients or SDK.
 
