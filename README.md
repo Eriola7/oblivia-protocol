@@ -154,6 +154,15 @@ A production build works on that domain and any of its subdomains (`sign.example
 
 The relay and reference clients must be deployed and configured together. The reference relay is publicly callable and has no API-key authentication. Set `OBLIVIA_ALLOWED_ORIGINS` to the actual reference-app origins; CORS restricts browser access, not arbitrary clients. Basic in-memory rate limits are not production sponsorship or abuse protection. Do not use this Devnet configuration as production infrastructure.
 
+## Documentation
+
+The `docs/` folder is also built into a documentation site with MkDocs Material, hosted on Read the Docs. It covers getting started, the SDK guide, generated SDK and program references, the relay API, the protocol spec and the security model. The references are generated from the code on every build, and CI builds the site in strict mode on every pull request.
+
+```bash
+npm ci --prefix sdk && npm ci --prefix tools/docs && pip install -r tools/docs/requirements.txt
+npm run docs:serve    # live preview at http://127.0.0.1:8000
+```
+
 ## Contributing and support
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — setup, conventions and review process

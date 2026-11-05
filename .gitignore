@@ -15,3 +15,8 @@ zk_groth16/node_modules/
 # Ceremony working files (publish transcripts separately)
 zk_groth16/ceremony/out/
 zk_groth16/ceremony/*.ptau
+
+# Documentation site (generated)
+site/
+docs/reference/sdk/
+docs/reference/program.md

@@ -24,10 +24,13 @@ declare_id!("HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG");
 pub mod oblivia_contracts {
     use super::*;
 
+    /// Create the global contract registry. Run once per deployment.
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         instructions::initialize::initialize_handler(ctx)
     }
 
+    /// Register a contract by its SHA-256 hash. Idempotent per hash: the
+    /// contract PDA is derived from it. Must precede signing.
     pub fn register_contract(
         ctx: Context<RegisterContract>,
         contract_hash: [u8; 32],
@@ -35,6 +38,8 @@ pub mod oblivia_contracts {
         instructions::register_contract::register_contract_handler(ctx, contract_hash)
     }
 
+    /// Disabled. Commitment-only submission without a proof; always fails
+    /// with `ProofBindingUnavailable`. Use `verify_groth16_v2`.
     pub fn submit_signature(
         ctx: Context<SubmitSignature>,
         key_commitment: [u8; 32],
@@ -47,10 +52,16 @@ pub mod oblivia_contracts {
         )
     }
 
+    /// Check that a recorded signature belongs to an active contract and log
+    /// its public commitments. Read-only.
     pub fn verify_signature(ctx: Context<VerifySignature>) -> Result<()> {
         instructions::verify_signature::verify_signature_handler(ctx)
     }
 
+    /// Create an M-of-N agreement for a registered contract. The agreement
+    /// address is derived from the contract hash, `threshold` and
+    /// `max_signers`, so its settings cannot be pre-empted or changed.
+    /// Requires `1 <= threshold <= max_signers`.
     pub fn create_multisig(
         ctx: Context<CreateMultiSig>,
         contract_hash: [u8; 32],
@@ -65,6 +76,9 @@ pub mod oblivia_contracts {
         )
     }
 
+    /// Disabled. Commitment-only multisig submission; always fails with
+    /// `ProofBindingUnavailable`. Use `verify_groth16_v2` then
+    /// `record_verified_multisig`.
     pub fn submit_multisig_signature(
         ctx: Context<SubmitMultiSigSignature>,
         key_commitment: [u8; 32],
@@ -77,6 +91,11 @@ pub mod oblivia_contracts {
         )
     }
 
+    /// Verify a contract-bound Groth16 proof on-chain and record the signature
+    /// in the same instruction. Public inputs must carry the key commitment,
+    /// signature commitment and both 128-bit limbs of the registered contract
+    /// hash. Creates the signature receipt and signer record; nothing is
+    /// written if any check fails.
     pub fn verify_groth16_v2(
         ctx: Context<VerifyGroth16V2>,
         proof_a: [u8; 64],
@@ -97,6 +116,10 @@ pub mod oblivia_contracts {
         )
     }
 
+    /// Count a verified signer toward a multisig agreement. Requires the
+    /// signer record and signature receipt created by `verify_groth16_v2` for
+    /// this contract and key commitment. Each key counts once; the agreement
+    /// finalizes automatically at its threshold.
     pub fn record_verified_multisig(
         ctx: Context<RecordVerifiedMultiSig>,
         contract_hash: [u8; 32],
@@ -110,6 +133,8 @@ pub mod oblivia_contracts {
         )
     }
 
+    /// Mark an agreement finalized once its threshold is met. Normally
+    /// unnecessary: counting the last required signature finalizes it.
     pub fn finalize_multisig(
         ctx: Context<FinalizeMultiSig>,
         contract_hash: [u8; 32],

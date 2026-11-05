@@ -15,6 +15,7 @@ Notable protocol-level changes. SDK releases have their own log in [sdk/CHANGELO
 - The Devnet smoke test now simulates well-formed forged and replayed proofs, uses random signers, and reports only observed results.
 
 ### Added
+- A documentation site (MkDocs Material, Read the Docs) with generated SDK and program references, a relay API reference and tested examples. CI builds it in strict mode.
 - Adversarial proof-verification tests: malformed encodings, off-curve and identity points, non-canonical inputs, and well-formed forgeries. They run in CI without a Solana toolchain.
 - The reference clients require a permanent passkey domain (`OBLIVIA_RP_ID`) before creating or unlocking signers. Explicit test builds (`OBLIVIA_PASSKEY_TEST=1`) are labelled as temporary.
 - The reference clients build in production mode with a strict Content Security Policy and no inline event handlers.

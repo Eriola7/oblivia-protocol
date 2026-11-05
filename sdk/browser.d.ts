@@ -1,4 +1,11 @@
-/** Browser-only passkey and local proving helpers. No wallet or transaction submission API. */
+/**
+ * Browser entry point: passkey unlock and local proving. It has no wallet
+ * or transaction submission API; submit proofs through your relay.
+ *
+ * @packageDocumentation
+ * @module @oblivia/sdk/browser
+ */
+
 export interface ProvingAssets {
   wasmUrl: string;
   zkeyUrl: string;
