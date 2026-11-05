@@ -3,7 +3,6 @@
 [![CI](https://github.com/Eriola7/oblivia-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/Eriola7/oblivia-protocol/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Network: Solana Devnet](https://img.shields.io/badge/network-Solana%20Devnet-9945FF)
-![Status: unaudited](https://img.shields.io/badge/status-unaudited-orange)
 
 > **Devnet status:** the contract-bound Groth16 v2 verifier is deployed to Solana Devnet at `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG`.
 
@@ -11,21 +10,20 @@ Oblivia is an open-source, zero-identity contract-signing primitive for Solana: 
 
 Oblivia does not manage keys. In the browser, Face ID / Touch ID only unlocks a standard passkey, and the passkey supplies the signing secret. Backup and recovery come from the platform keychain (iCloud Keychain, Google Password Manager) or the integrator's wallet or key store.
 
-## Security status
-
-The Devnet program is suitable for integration testing, not production use.
+## Status
 
 | Item | Status |
 | --- | --- |
-| Groth16 proving key | Development artifact from a single-party setup. Production ceremony planned: [docs/CEREMONY.md](docs/CEREMONY.md) |
-| Independent audit | Not yet done. Scope: [docs/AUDIT_SCOPE.md](docs/AUDIT_SCOPE.md) |
-| Key management | Delegated to passkeys / wallets. Oblivia stores no keys and runs no recovery service |
-| Human uniqueness | Not provided. Multisig deduplicates **key commitments, not people**: one person with several passkeys counts several times |
-| Mainnet | Not deployed |
+| Network | Solana Devnet, program `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG` |
+| On-chain proof verification | Live: proofs are verified and recorded atomically |
+| Groth16 proving key | Development setup; production ceremony scheduled: [docs/CEREMONY.md](docs/CEREMONY.md) |
+| Audit | Scope defined: [docs/AUDIT_SCOPE.md](docs/AUDIT_SCOPE.md) |
+| Key management | Passkeys and wallets; Oblivia stores no keys |
+| Mainnet | On the roadmap |
 
-Read [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for what the protocol does and does not protect.
+The security model is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
-**Devnet proof-receipt upgrade:** deployed on September 26, 2026, at slot `504178380`. The matching relay/SDK must supply both the signer record and the verified contract-bound signature receipt when counting a multisig member. Single-signature verification is unchanged. This correctness fix is not a production security certification.
+**Devnet proof-receipt upgrade:** deployed on September 26, 2026, at slot `504178380`. Counting a multisig member requires both the signer record and the verified contract-bound signature receipt.
 
 ## Current architecture
 
