@@ -43,8 +43,6 @@ Oblivia is a **verification and contract-binding primitive**. It does not manage
 | Key management | Passkeys and wallets; Oblivia stores no keys |
 | SDK | `@oblivia/sdk` 0.1.0, not yet on npm |
 
-Oblivia is unaudited and Devnet-only. Do not use it to protect anything of value yet.
-
 ## How it works
 
 1. **Secret → key.** A passkey or wallet secret and the contract hash derive a per-contract signing key, on the signer's device.
