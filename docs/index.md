@@ -38,8 +38,8 @@ Oblivia is a **verification and contract-binding primitive**. It does not manage
 | --- | --- |
 | Network | Solana Devnet, program `HaRpXyybfpYpwxkhfj8CjY8EjGqvRd96Zi33iSCTxvHG` |
 | On-chain proof verification | Live: proofs are verified and recorded atomically |
-| Proving key | Development artifact; production [trusted setup](CEREMONY.md) planned |
-| Independent audit | Not yet; [scope](AUDIT_SCOPE.md) defined |
+| Proving key | Development setup; production [trusted setup](CEREMONY.md) scheduled |
+| Audit | [Scope](AUDIT_SCOPE.md) defined |
 | Key management | Passkeys and wallets; Oblivia stores no keys |
 | SDK | `@oblivia/sdk` 0.1.0, not yet on npm |
 
