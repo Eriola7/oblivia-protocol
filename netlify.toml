@@ -1,0 +1,9 @@
+# Signing app on Netlify: https://oblivia-solsign.netlify.app
+# Passkeys are bound to this address (OBLIVIA_RP_ID). Keep the site name.
+[build]
+  command = "npm ci --prefix sdk && npm ci --prefix browser-client && npm --prefix browser-client run build"
+  publish = "browser-client/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  OBLIVIA_RP_ID = "oblivia-solsign.netlify.app"

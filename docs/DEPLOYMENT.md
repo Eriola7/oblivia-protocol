@@ -73,12 +73,13 @@ Redeploy `relay/` on its host right after the upgrade. It needs:
 
 ## 5. Build and deploy the signing app
 
+The signing app lives at **https://oblivia-solsign.netlify.app**, and passkeys are bound to that address. `netlify.toml` builds it with `OBLIVIA_RP_ID=oblivia-solsign.netlify.app`. With the Netlify site linked to this repository, pushing `main` deploys it. Otherwise, build and upload by hand:
+
 ```bash
-OBLIVIA_RP_ID=example.com OBLIVIA_RELAY_URL=https://your-relay.example \
-  npm --prefix browser-client run build
+OBLIVIA_RP_ID=oblivia-solsign.netlify.app npm --prefix browser-client run build
 ```
 
-Upload `browser-client/dist/`. The build writes a `_headers` file that Netlify and Cloudflare Pages apply automatically. On any other host, set these response headers yourself:
+Then drag `browser-client/dist/` onto the site's **Deploys** page in Netlify. Keep the site name: renaming it changes every user's signer. The build writes a `_headers` file that Netlify and Cloudflare Pages apply automatically. On any other host, set these response headers yourself:
 
 ```
 Content-Security-Policy: <the policy from the page's meta tag>; frame-ancestors 'none'
