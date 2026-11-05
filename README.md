@@ -23,7 +23,7 @@ Oblivia does not manage keys. In the browser, Face ID / Touch ID only unlocks a 
 
 The security model is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
-**Devnet proof-receipt upgrade:** deployed on September 26, 2026, at slot `504178380`. Counting a multisig member requires both the signer record and the verified contract-bound signature receipt.
+**Devnet upgrades:** November 5, 2026, at slot `518923390` (agreement settings in the multisig address; v1 verifier removed). September 26, 2026, at slot `504178380` (counting a multisig member requires both the signer record and the verified contract-bound signature receipt).
 
 ## Current architecture
 
@@ -105,7 +105,7 @@ The current v2 entrypoints are:
 - `verify_groth16_v2` — validates the Groth16 proof and atomically records the contract-bound anonymous signature.
 - `record_verified_multisig` — records a verified signer for a multisig agreement and finalizes it automatically at the threshold.
 
-The v1 `verify_groth16` instruction, which checked proofs against a superseded key that was not bound to a contract, has been **removed from the program source**. It never recorded signatures, but it should not ship. **The currently deployed Devnet program still contains it until the next upgrade.** The commitment-only `submit_signature` and `submit_multisig_signature` remain and fail closed. New integrations must use the v2 path.
+The v1 `verify_groth16` instruction, which checked proofs against a superseded key that was not bound to a contract, has been **removed from the program source**. It is no longer in the deployed Devnet program. The commitment-only `submit_signature` and `submit_multisig_signature` remain and fail closed. New integrations must use the v2 path.
 
 The patched multisig counter requires a program-owned `SignerRecord` PDA and a verified `ObliviaSignature` receipt for the exact contract and key commitment. The relay submits verification and counting atomically. The low-level `record_verified_multisig` instruction can also count an existing verified receipt later, but only once; the current relay/SDK signing helpers always submit a fresh verification and therefore cannot reuse a key that has already signed that contract singly. The local VM tests exercise missing/forged/mismatched records and receipts, duplicate counting, threshold finalization, a real development proof, and invalid-proof rollback.
 
@@ -118,22 +118,20 @@ The patched multisig counter requires a program-owned `SignerRecord` PDA and a v
 
 The proof points are valid curve points, so the first three can only fail at the pairing check and the replay at the contract-hash comparison (`tests/release_check_cases.test.js` checks this offline). The script also checks a count with no verification at all, which shows the counting gate exists but does not test proofs. It then signs both genuine signers, rejects a duplicate count and confirms finalization. Every value in its JSON output is observed, not hard-coded, and it exits non-zero if any check fails.
 
-This is a smoke test of the deployed program, not a security audit.
+**Latest run (5 November 2026, after the upgrade; all 10 checks passed).**
 
-**Latest run (4 November 2026, all 10 checks passed).**
-
-- The three forged proofs were rejected at the pairing verification (`verify_groth16_v2.rs:51`).
-- The replayed proof was rejected at the contract-hash comparison (`verify_groth16_v2.rs:38`).
+- The three forged proofs were rejected at the pairing verification (`verify_groth16_v2.rs:54`).
+- The replayed proof was rejected at the contract-hash comparison (`verify_groth16_v2.rs:41`).
 - A count with no verification was rejected for a missing signer record.
 - No state or receipt was left behind by any rejected attempt.
 - A duplicate count was rejected.
 - The agreement finalized at 2 of 2.
 
-Transactions: [setup](https://explorer.solana.com/tx/5dRdk3aegZxXgtUP8so1SdT6ChGUW2CXvCRZNDccEUSPXkGfbLDFdMAp4gxEK6riy1KMngdGUVfm7NBJAsYNWXGw?cluster=devnet), [signer 1](https://explorer.solana.com/tx/5jYxfmrL9B5NM9r2wcLxTKEqfuQVUR1AvuzkeUvM9eDU52W2ncyWcbjQz81PrWiTDCvmZxBoeNqnrMy3S9GHp2aq?cluster=devnet), [signer 2, finalizing](https://explorer.solana.com/tx/5YMKCQyrGHomjbYjnsqBM8vLvPkETHdvydEqGbKuuFtQVdrVhWWbxPUVe9Pn52FUxrp951zmceXdk43SqjnS8Xj7?cluster=devnet); [agreement account](https://explorer.solana.com/address/49mExCm3tXYNgXMJEr6UihXXzoCLgXpRV7ej1wbVVkMx?cluster=devnet).
+Transactions: [setup](https://explorer.solana.com/tx/b2SqThNDEUDZDxXXpcVx7buVZJooyzXNDUiri5Ts1zEiRW6XwuaJYyB4Gyt68AmcGMa3qtsyS7sDJ3PJQf1TJ3b?cluster=devnet), [signer 1](https://explorer.solana.com/tx/59UoFNeQc6v2sSCKUuPT6xrzU1Bkn3icc4akcW33tzwShiLxRVbBGF81dRzfjtjYGvn8dGzc8nMZ9XR9H5EhdLM?cluster=devnet), [signer 2, finalizing](https://explorer.solana.com/tx/2Gf8tpjnmdAEbWuk8a6tVDBVhKyz6dgUrePTiBhgN2FYBdUkxHxEyjgeYL51eE9AbcWUTuoHqH4BzR1QmWbqZ8Gj?cluster=devnet); [agreement account](https://explorer.solana.com/address/DtT6hMk7V5x5TJ7iQ4gvuEemCuuW6d55kP3MUg3h9FCB?cluster=devnet).
 
-The script on `main` targets the next program upgrade (agreement settings in the address), so run it again after that upgrade; the run above used the previous version. Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
+Reproduce with `OBLIVIA_E2E_KEYPAIR=/absolute/path/to/test-payer.json node zk_groth16/e2e_multisig_devnet.js`; this spends Devnet SOL and creates a new test agreement.
 
-An agreement's threshold and maximum signer count are part of its on-chain address. The same contract with different settings is a separate agreement, so nobody can claim a contract's agreement first with settings its creator did not choose. Share links, status lookups and signatures always carry the settings. **This takes effect on Devnet at the next program upgrade**; agreements created before it use the old address format. Participant eligibility (who may sign) remains the integrating application's responsibility.
+An agreement's threshold and maximum signer count are part of its on-chain address. The same contract with different settings is a separate agreement, so nobody can claim a contract's agreement first with settings its creator did not choose. Share links, status lookups and signatures always carry the settings. Agreements created before the November 5 upgrade use the old address format. Participant eligibility (who may sign) remains the integrating application's responsibility.
 
 ## Passkey domain
 

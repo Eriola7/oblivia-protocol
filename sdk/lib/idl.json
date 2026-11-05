@@ -9,6 +9,12 @@
   "instructions": [
     {
       "name": "create_multisig",
+      "docs": [
+        "Create an M-of-N agreement for a registered contract. The agreement",
+        "address is derived from the contract hash, `threshold` and",
+        "`max_signers`, so its settings cannot be pre-empted or changed.",
+        "Requires `1 <= threshold <= max_signers`."
+      ],
       "discriminator": [
         148,
         146,
@@ -88,6 +94,10 @@
     },
     {
       "name": "finalize_multisig",
+      "docs": [
+        "Mark an agreement finalized once its threshold is met. Normally",
+        "unnecessary: counting the last required signature finalizes it."
+      ],
       "discriminator": [
         172,
         197,
@@ -150,6 +160,9 @@
     },
     {
       "name": "initialize",
+      "docs": [
+        "Create the global contract registry. Run once per deployment."
+      ],
       "discriminator": [
         175,
         175,
@@ -204,6 +217,12 @@
     },
     {
       "name": "record_verified_multisig",
+      "docs": [
+        "Count a verified signer toward a multisig agreement. Requires the",
+        "signer record and signature receipt created by `verify_groth16_v2` for",
+        "this contract and key commitment. Each key counts once; the agreement",
+        "finalizes automatically at its threshold."
+      ],
       "discriminator": [
         25,
         151,
@@ -407,6 +426,10 @@
     },
     {
       "name": "register_contract",
+      "docs": [
+        "Register a contract by its SHA-256 hash. Idempotent per hash: the",
+        "contract PDA is derived from it. Must precede signing."
+      ],
       "discriminator": [
         215,
         41,
@@ -504,6 +527,11 @@
     },
     {
       "name": "submit_multisig_signature",
+      "docs": [
+        "Disabled. Commitment-only multisig submission; always fails with",
+        "`ProofBindingUnavailable`. Use `verify_groth16_v2` then",
+        "`record_verified_multisig`."
+      ],
       "discriminator": [
         114,
         159,
@@ -674,6 +702,10 @@
     },
     {
       "name": "submit_signature",
+      "docs": [
+        "Disabled. Commitment-only submission without a proof; always fails",
+        "with `ProofBindingUnavailable`. Use `verify_groth16_v2`."
+      ],
       "discriminator": [
         205,
         224,
@@ -800,6 +832,13 @@
     },
     {
       "name": "verify_groth16_v2",
+      "docs": [
+        "Verify a contract-bound Groth16 proof on-chain and record the signature",
+        "in the same instruction. Public inputs must carry the key commitment,",
+        "signature commitment and both 128-bit limbs of the registered contract",
+        "hash. Creates the signature receipt and signer record; nothing is",
+        "written if any check fails."
+      ],
       "discriminator": [
         105,
         92,
@@ -959,6 +998,10 @@
     },
     {
       "name": "verify_signature",
+      "docs": [
+        "Check that a recorded signature belongs to an active contract and log",
+        "its public commitments. Read-only."
+      ],
       "discriminator": [
         91,
         139,

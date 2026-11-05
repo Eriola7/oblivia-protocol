@@ -2,16 +2,16 @@
 
 How to ship a new version of the program, relay and signing app together. The three must move as one: the program defines the account addresses, and the relay and app derive the same addresses.
 
-## Pending release
+## Current release
 
-`main` contains program changes that are **not yet on Devnet**:
+Deployed to Devnet on November 5, 2026, at slot `518923390`, together with the matching relay and signing app:
 
 - the v1 `verify_groth16` instruction is removed
 - multisig addresses include the agreement's threshold and maximum signers
 
-The circuit and verification key are unchanged. If you run the [trusted setup ceremony](CEREMONY.md) first, ship its key in the same release so you only upgrade once.
+Agreements created before this release use the old address format, so the current relay and app cannot find them. Signatures already recorded stay valid on-chain.
 
-Agreements created before this upgrade use the old address format, so the new relay and app cannot find them. Signatures already recorded stay valid on-chain. This is acceptable on Devnet; announce it to anyone testing.
+If you run the [trusted setup ceremony](CEREMONY.md), ship its key in the next release so the program and clients move together.
 
 ## Before you start
 

@@ -52,4 +52,3 @@ The host must also send the same policy as an HTTP header with `frame-ancestors 
 - The reference relay is publicly callable with in-memory rate limits only.
 - Devnet only.
 - WebAuthn PRF support varies by platform and passkey provider. Unsupported providers fail closed with a clear error.
-- The deployed Devnet program still contains the removed v1 `verify_groth16` instruction until the next upgrade.
