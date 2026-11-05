@@ -1,0 +1,16 @@
+{
+  "name": "oblivia-docs-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates the reference pages of the Oblivia documentation site",
+  "scripts": {
+    "generate": "node generate.js",
+    "test:examples": "node examples/offline-proof.js && node --check examples/sign-devnet.js && node --check examples/multisig-devnet.js && node --check --input-type=module < examples/browser-passkey.js"
+  },
+  "devDependencies": {
+    "@oblivia/sdk": "file:../../sdk",
+    "typedoc": "0.28.20",
+    "typedoc-plugin-markdown": "4.14.1",
+    "typescript": "5.9.3"
+  }
+}

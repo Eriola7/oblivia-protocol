@@ -27,6 +27,15 @@ npm run test:program                                   # cargo check + proof-ver
 npm run test:multisig                                  # program VM tests (needs anchor build)
 ```
 
+Documentation site (needs Python for MkDocs):
+
+```bash
+npm ci --prefix tools/docs && pip install -r tools/docs/requirements.txt
+npm run docs                                           # strict build; fails on broken links
+```
+
+The SDK and program reference pages are generated; edit the doc comments in `sdk/index.d.ts`, `sdk/browser.d.ts` or the program's `lib.rs`, not the generated files. Every program instruction needs a `///` doc comment, or the docs build fails.
+
 Never commit `.env` files or keypairs. Use a dedicated Devnet test payer for anything that sends transactions.
 
 ## Repository layout

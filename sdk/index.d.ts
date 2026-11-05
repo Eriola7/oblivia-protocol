@@ -1,8 +1,12 @@
 /**
- * Oblivia SDK — zero-identity contract signing for Solana.
- * An on-chain Groth16 verification and contract-binding primitive. Key
- * management and backup are left to standard wallets and passkeys.
- * MIT licensed.
+ * Node entry point: key derivation, local proving and Devnet submission.
+ *
+ * Oblivia is an on-chain Groth16 verification and contract-binding
+ * primitive. Key management and backup are left to standard wallets and
+ * passkeys. Submission needs `OBLIVIA_DEVNET_KEY`; proving does not.
+ *
+ * @packageDocumentation
+ * @module @oblivia/sdk
  */
 import type { PublicKey } from '@solana/web3.js';
 
@@ -36,16 +40,6 @@ export interface ProofResult {
   publicInputs: number[];
   keyCommitment: number[];
   signatureCommitment: number[];
-}
-
-/** Multi-signature contract state. */
-export interface MultiSigState {
-  /** Number of signatures collected so far. */
-  signaturesCollected: number;
-  /** Signatures required for finalization. */
-  threshold: number;
-  /** True once the threshold is reached and the contract is finalized. */
-  finalized: boolean;
 }
 
 /** Bytes from a passkey PRF, wallet or device seed: at least 32 bytes, not all zero. */

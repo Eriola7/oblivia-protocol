@@ -1,0 +1,29 @@
+{
+  "$schema": "https://typedoc-plugin-markdown.org/schema.json",
+  "entryPoints": [
+    "../../sdk/index.d.ts",
+    "../../sdk/browser.d.ts"
+  ],
+  "tsconfig": "./tsconfig.sdk.json",
+  "plugin": [
+    "typedoc-plugin-markdown"
+  ],
+  "out": "../../docs/reference/sdk",
+  "cleanOutputDir": true,
+  "readme": "none",
+  "entryFileName": "index",
+  "hidePageHeader": true,
+  "hideBreadcrumbs": true,
+  "disableSources": true,
+  "excludeExternals": true,
+  "useCodeBlocks": true,
+  "parametersFormat": "table",
+  "interfacePropertiesFormat": "table",
+  "treatWarningsAsErrors": true,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": false
+  },
+  "useHTMLEncodedBrackets": true
+}
