@@ -49,6 +49,6 @@ The host must also send the same policy as an HTTP header with `frame-ancestors 
 
 - The proving key is a development artifact from a single-party setup. Until the [production ceremony](CEREMONY.md), its creator could forge proofs.
 - No independent audit yet ([scope](AUDIT_SCOPE.md)).
-- The reference relay is publicly callable with in-memory rate limits only.
+- The reference relay is publicly callable. Per-IP rate limits are in memory; the fee payer's daily budget and balance floor bound what abuse can cost.
 - Devnet only.
 - WebAuthn PRF support varies by platform and passkey provider. Unsupported providers fail closed with a clear error.

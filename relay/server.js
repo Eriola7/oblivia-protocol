@@ -7,6 +7,7 @@ const anchor = require('@coral-xyz/anchor');
 const { validateMultisigConfig, assertMultisigConfig, multisigSeeds } = require('../sdk/lib/multisig_config');
 const { createAccountReaders, initializeOrReadExisting } = require('../sdk/lib/account_state');
 const { readContractAccount, readMultisigAccount } = createAccountReaders(anchor);
+const { createSponsorBudget, budgetSettings, SponsorPaused } = require('./sponsor_budget');
 
 const app = express();
 const relayOrigins = (process.env.OBLIVIA_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
@@ -68,6 +69,28 @@ function limitSponsoredRequest(req, res, next) {
     if (now - state.start > 60 * 60 * 1000) { state.start = now; state.count = 0; }
     if (++state.count > 10) return res.status(429).json({ error: 'Sponsored signing limit reached; try again later.' });
     relayWindows.set(key, state);
+    next();
+}
+
+// Caps what the sponsor wallet can spend per day and stops sponsoring below a
+// balance floor. See sponsor_budget.js.
+let sponsorBudget = null;
+const sponsorSettings = budgetSettings(process.env);
+async function budgetSponsoredRequest(req, res, next) {
+    let payer;
+    try { payer = getKeypair().publicKey; }
+    catch (_) { return next(); } // the route reports the misconfigured signer
+    if (!sponsorBudget) {
+        sponsorBudget = createSponsorBudget({ ...sponsorSettings, getBalance: () => connection.getBalance(payer, 'confirmed') });
+    }
+    let release;
+    try { release = await sponsorBudget.acquire(); }
+    catch (error) {
+        if (error instanceof SponsorPaused) return sendRelayError(res, new RelayError(503, error.message));
+        return sendRelayError(res, new RelayError(502, 'Sponsor balance is unavailable'));
+    }
+    res.on('finish', release);
+    res.on('close', release);
     next();
 }
 
@@ -157,7 +180,7 @@ app.get('/health', (req, res) => {
     }
 });
 
-app.post('/sign', limitSponsoredRequest, async (req, res) => {
+app.post('/sign', limitSponsoredRequest, budgetSponsoredRequest, async (req, res) => {
     try {
         const { contractHash, keyCommitment, signatureCommitment, proofA, proofB, proofC, publicInputs } = validateRequestBody(req.body);
 
@@ -231,7 +254,7 @@ app.post('/sign', limitSponsoredRequest, async (req, res) => {
 
 // ---- MULTISIG ----
 
-app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
+app.post('/multisig/create', limitSponsoredRequest, budgetSponsoredRequest, async (req, res) => {
     try {
         const { contractHash, threshold, maxSigners } = validateRequestBody(req.body);
         validateRequestConfig(threshold, maxSigners);
@@ -279,7 +302,7 @@ app.post('/multisig/create', limitSponsoredRequest, async (req, res) => {
     } catch (e) { sendRelayError(res, e); }
 });
 
-app.post('/multisig/sign', limitSponsoredRequest, async (req, res) => {
+app.post('/multisig/sign', limitSponsoredRequest, budgetSponsoredRequest, async (req, res) => {
     try {
         const { contractHash, threshold, maxSigners, keyCommitment, signatureCommitment, proofA, proofB, proofC, publicInputs } = validateRequestBody(req.body);
         validateRequestConfig(threshold, maxSigners);

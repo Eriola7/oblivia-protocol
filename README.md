@@ -55,7 +55,7 @@ The same Groth16 relation is proven by the client and verified by the on-chain p
 | Anonymous threshold multisig | Implemented as atomic verification plus member recording |
 | Browser reference client | Passkey unlock (WebAuthn PRF) and local, browser-side Groth16 proving |
 | Node SDK (`@oblivia/sdk`) | Generates and locally verifies Groth16 proofs before submission; installable as a standalone package |
-| Sponsored relay | Implements v2 submission endpoints with origin controls and basic in-memory rate limits |
+| Sponsored relay | Implements v2 submission endpoints with origin controls, per-IP rate limits, and a daily spending budget and balance floor for the fee payer |
 
 ## Repository layout
 
@@ -148,7 +148,7 @@ A production build works on that domain and any of its subdomains (`sign.example
 
 ## Development notes
 
-The relay and reference clients must be deployed and configured together. The reference relay is publicly callable and has no API-key authentication. Set `OBLIVIA_ALLOWED_ORIGINS` to the actual reference-app origins; CORS restricts browser access, not arbitrary clients. Basic in-memory rate limits are not production sponsorship or abuse protection. Do not use this Devnet configuration as production infrastructure.
+The relay and reference clients must be deployed and configured together. The reference relay is publicly callable and has no API-key authentication. Set `OBLIVIA_ALLOWED_ORIGINS` to the actual reference-app origins; CORS restricts browser access, not arbitrary clients. Per-IP rate limits are kept in memory; the fee payer's daily budget (`OBLIVIA_SPONSOR_DAILY_SOL`) and balance floor (`OBLIVIA_SPONSOR_MIN_SOL`) bound what abuse can cost.
 
 ## Documentation
 

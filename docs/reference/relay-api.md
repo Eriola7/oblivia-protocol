@@ -20,9 +20,18 @@ The relay pays Devnet fees on behalf of browser signers, so a signing page never
 | `409` | An agreement exists with different settings. |
 | `429` | Rate limit reached. |
 | `502` | Solana RPC or transaction failure. The request may be retried. |
-| `503` | The relay's fee payer is not configured (health only). |
+| `503` | Sponsored signing is paused (wallet below its floor or daily budget used), or the fee payer is not configured. Nothing was submitted. |
 
 **Rate limit:** sponsored endpoints (`POST`) allow 10 requests per client IP per hour.
+
+**Spending limits:** the relay reads the fee payer's balance before every sponsored request and pauses sponsoring when either limit is reached:
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `OBLIVIA_SPONSOR_DAILY_SOL` | `0.5` | The most the fee payer may spend per UTC day. |
+| `OBLIVIA_SPONSOR_MIN_SOL` | `0.2` | Sponsoring stops before the balance would fall below this. |
+
+The floor is checked against the chain, so it holds across restarts. Concurrent requests each reserve an estimated cost, so a burst cannot overshoot either limit. `GET /health` stays `ready` while sponsoring is paused, so the host does not restart a working relay.
 
 **CORS:** only the origins in `OBLIVIA_ALLOWED_ORIGINS` may call the relay from a browser.
 

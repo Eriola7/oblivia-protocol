@@ -2,6 +2,11 @@
 
 Notable protocol-level changes. SDK releases have their own log in [sdk/CHANGELOG.md](sdk/CHANGELOG.md). The full history is in the git log.
 
+## Unreleased
+
+### Added
+- The relay enforces a daily spending budget and a balance floor for its fee payer (`OBLIVIA_SPONSOR_DAILY_SOL`, `OBLIVIA_SPONSOR_MIN_SOL`), so abuse of the public relay has a bounded cost.
+
 ## 2026-11-05 — Devnet upgrade
 
 Deployed at slot `518923390`.

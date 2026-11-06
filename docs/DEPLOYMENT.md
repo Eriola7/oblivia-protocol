@@ -70,6 +70,9 @@ Redeploy `relay/` on its host right after the upgrade. It needs:
 
 - `OBLIVIA_DEVNET_KEY`: the sponsor fee payer, not the upgrade authority.
 - `OBLIVIA_ALLOWED_ORIGINS`: the signing app's production origin, for example `https://sign.example.com`.
+- Optional: `OBLIVIA_SPONSOR_DAILY_SOL` (default `0.5`) and `OBLIVIA_SPONSOR_MIN_SOL` (default `0.2`), the fee payer's daily spending budget and balance floor. See the [relay API](reference/relay-api.md).
+
+Set the host's health check to `GET /health`, so a relay whose fee payer key is broken is restarted and a failing deploy is not promoted.
 
 ## 5. Build and deploy the signing app
 
